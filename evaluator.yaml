@@ -68,6 +68,17 @@ deferrals:
       railway/ is its platform descriptor.
     until: null
 
+exemptions:
+  - rule: PY-013
+    reason: >
+      There is no stream of arriving input to see twice. Each run reads the
+      current state of both databases and acts on it: db-poller publishes a
+      point-in-time measurement (a repeat is just another sample), db-backup
+      writes a dump to a key named by its run time (a second run in a night
+      is a second, harmless copy that the S3 lifecycle expires), and db-drill
+      restores into a scratch database it creates and drops within the run.
+      Nothing is ingested, so nothing can be ingested twice.
+
 layout_exceptions:
   - path: railway/
     reason: >
