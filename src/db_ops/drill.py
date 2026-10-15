@@ -24,11 +24,13 @@ LOG = log.get_logger()
 
 
 def work(run_id: str) -> dict[str, Any]:
+    """Do one run of this service's work and return its summary."""
     LOG.info("%s.stub run_id=%s nothing to do yet", SERVICE, run_id)
     return {"service": SERVICE, "stub": True}
 
 
 def main() -> int:
+    """Run the service once and return the process exit code."""
     return run(SERVICE, work)
 
 
