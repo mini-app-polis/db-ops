@@ -12,10 +12,10 @@ own start command so a failure in one can never hide in another:
 |---|---|---|---|
 | `db-poller` | `python -m db_ops.poller` | Publishes both databases' metrics to CloudWatch, `MiniAppPolis/Postgres` | MINI-58 |
 | `db-backup` | `python -m db_ops.backup` | Nightly `pg_dump -Fc` of both databases to S3 — the copy that is not on Railway | MINI-63 |
-| `db-drill` | `python -m db_ops.drill` | Monthly: restores a point-in-time fork of each database, verifies it, deletes it, and reports the measured RPO and RTO (the S3 dump drill joins in MINI-65) | MINI-64, MINI-65 |
+| `db-drill` | `python -m db_ops.drill` | Monthly: restores a point-in-time fork of each database and the latest S3 dump of each, verifies them, deletes them, and reports the measured RPO and RTO | MINI-64, MINI-65 |
 
-`db-backup` (MINI-63) and `db-poller` (MINI-58) are live. `db-drill` drills
-point-in-time recovery (MINI-64); the S3 dump drill joins it in MINI-65.
+All three are live: `db-poller` (MINI-58), `db-backup` (MINI-63) and
+`db-drill` (MINI-64, MINI-65).
 
 All three run from one image, built from the root `Dockerfile`, which brings
 the PostgreSQL 18 client tools (`pg_dump`, `pg_restore`) from the PostgreSQL
@@ -95,8 +95,20 @@ archive (Railway has no read-only variant). A fork whose deletion cannot be
 confirmed fails the run, and every run flags any `drill-*` service older
 than an hour.
 
+Then the **S3 dump layer** (MINI-65), for each database: the newest
+`daily/<database>/` dump is downloaded with the read-only key (its age is
+this layer's effective RPO), restored with `pg_restore --no-owner --no-acl
+--exit-on-error` into a throwaway PostgreSQL 18 that the drill starts inside
+its own container on a Unix socket, and checked against the source as
+above minus the canary — the dump's migrations must all be ones the source
+has, since the source may have moved on since last night. A newest dump
+older than 36 hours fails the drill: db-backup has stopped. The scratch
+server and every file are removed at the end. Each layer is drilled
+whatever happened to the other.
+
 Every run sends a run report with each database's `rpo_seconds`,
-`rto_seconds`, tables and rows; a failure is a WARN (so it reaches the
+`rto_seconds`, tables and rows, and `dump_age_hours` and
+`dump_restore_seconds`; a failure is a WARN (so it reaches the
 errors channel), goes to Sentry and exits 1. It refuses to run from any
 Railway environment but production.
 

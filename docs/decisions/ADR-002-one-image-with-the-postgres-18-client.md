@@ -41,3 +41,18 @@ repository change cannot silently hand the services an older client.
   on the next build.
 - When the databases move to a new major, `PG_MAJOR` moves with them, in
   the same change.
+
+## Amendment — 2026-10-15 (MINI-65): the server too
+
+db-drill restores the nightly S3 dumps into a throwaway PostgreSQL inside
+its own container, never into a Railway database. So the image also carries
+`postgresql-18` (the server) and `postgresql-18-pgvector`, because
+api-kaianolevine-com's schema creates the `vector` extension and
+`pg_restore --exit-on-error` fails without it. Debian's automatic `main`
+cluster is switched off before install; the drill runs `initdb` itself,
+under `/tmp`, as the unprivileged user. The build now also fails if the
+server's `initdb` is not the pinned major.
+
+The image is larger by the server's size; db-poller and db-backup carry
+binaries they never run. Splitting images per service is the alternative,
+and is not worth a second build for one package set.

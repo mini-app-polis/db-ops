@@ -33,7 +33,9 @@ in, and that must be production. Anywhere else the run logs that it would
 have drilled and exits 0, unless ``DB_DRILL_ENABLED=true`` asks for a
 deliberate test — which still refuses a non-production Railway environment.
 
-The S3 dump drill (MINI-65) joins this module later.
+Then the second layer, in :mod:`db_ops.dump_drill` (MINI-65): the latest
+nightly S3 dump of each database is restored into a throwaway Postgres
+inside this container and checked the same way, minus the canary.
 
     python -m db_ops.drill
 """
@@ -128,6 +130,20 @@ class Settings(BaseSettings):
     key_table_min_rows: int = 100
     #: A drill-* service older than this was not torn down.
     stale_fork_seconds: float = 3600
+
+    # -- the S3 dump drill (MINI-65) --
+    #: The off-platform backup bucket, and the read-only key for it
+    #: (mini-app-polis/infra database_backups.tf, db-backup-reader).
+    db_backup_bucket: str
+    db_drill_aws_access_key_id: SecretStr
+    db_drill_aws_secret_access_key: SecretStr
+    aws_region: str = "us-east-1"
+    #: The PostgreSQL 18 server binaries the image installs.
+    pg_bin_dir: str = "/usr/lib/postgresql/18/bin"
+    #: One dump's download and pg_restore.
+    dump_restore_timeout_seconds: float = 1200
+    #: The newest dump older than this means db-backup has stopped.
+    dump_max_age_hours: float = 36
 
     @property
     def databases(self) -> dict[str, tuple[str, str]]:
@@ -241,9 +257,8 @@ def wait_archived(conn: Any, wal: str, settings: Settings, *, sleep: Sleep) -> d
 
 
 def verify(source: Any, fork: Any, run_id: str, settings: Settings) -> Verification:
-    """Check the fork against the source. Problems are collected, not raised."""
-    result = Verification()
-
+    """Check a PITR fork against the source: its canary, then :func:`compare`."""
+    result = compare(source, fork, settings)
     kinds = {
         row[0]
         for row in fork.execute(
@@ -254,18 +269,42 @@ def verify(source: Any, fork: Any, run_id: str, settings: Settings) -> Verificat
         result.problems.append("canary missing: the restore stopped short")
     if "fence" in kinds:
         result.problems.append("fence present: the restore went past its target")
+    return result
+
+
+def compare(
+    source: Any,
+    copy: Any,
+    settings: Settings,
+    *,
+    label: str = "fork",
+    copy_may_be_older: bool = False,
+) -> Verification:
+    """Check a restored copy against the live source. Problems are collected.
+
+    ``schema_migrations`` must match — or, for a copy taken earlier than now
+    (``copy_may_be_older``), hold nothing the source does not. Every source
+    table must exist in the copy, and none with real data on the source may
+    be empty in it.
+    """
+    result = Verification()
 
     migrations = "SELECT filename FROM public.schema_migrations ORDER BY filename"
     try:
         source_migrations = [r[0] for r in source.execute(migrations).fetchall()]
-        fork_migrations = [r[0] for r in fork.execute(migrations).fetchall()]
+        copy_migrations = [r[0] for r in copy.execute(migrations).fetchall()]
     except psycopg.Error as exc:
         result.problems.append(f"schema_migrations unreadable: {_short(exc)}")
     else:
-        if source_migrations != fork_migrations:
+        matches = (
+            bool(copy_migrations) and set(copy_migrations) <= set(source_migrations)
+            if copy_may_be_older
+            else source_migrations == copy_migrations
+        )
+        if not matches:
             result.problems.append(
                 f"schema_migrations differ: source {len(source_migrations)}, "
-                f"fork {len(fork_migrations)}"
+                f"{label} {len(copy_migrations)}"
             )
 
     tables = source.execute(
@@ -280,16 +319,16 @@ def verify(source: Any, fork: Any, run_id: str, settings: Settings) -> Verificat
         )
         source_rows = source.execute(count).fetchone()[0]
         try:
-            fork_rows = fork.execute(count).fetchone()[0]
+            copy_rows = copy.execute(count).fetchone()[0]
         except psycopg.Error:
-            result.problems.append(f"{schema}.{table} missing from the fork")
+            result.problems.append(f"{schema}.{table} missing from the {label}")
             continue
         result.tables += 1
         result.rows_source += source_rows
-        result.rows_fork += fork_rows
-        if source_rows >= settings.key_table_min_rows and fork_rows == 0:
+        result.rows_fork += copy_rows
+        if source_rows >= settings.key_table_min_rows and copy_rows == 0:
             result.problems.append(
-                f"{schema}.{table} empty in the fork ({source_rows} rows in source)"
+                f"{schema}.{table} empty in the {label} ({source_rows} rows in source)"
             )
     return result
 
@@ -596,7 +635,9 @@ def _enabled() -> bool:
 
 
 def work(run_id: str) -> dict[str, Any]:
-    """Drill both databases once and return the measured figures."""
+    """Drill both recovery layers for both databases; return the figures."""
+    from db_ops import dump_drill  # here, not at the top: it imports this module
+
     if not _enabled():
         LOG.info(
             "%s.skipped reason=not_production hint=set DB_DRILL_ENABLED=true "
@@ -613,12 +654,25 @@ def work(run_id: str) -> dict[str, Any]:
         settings.railway_environment_id,
     )
     report = RunReport(flow_name=SERVICE, repo=REPO, run_id=run_id)
+    failures: list[str] = []
+    figures: dict[str, Any] = {}
     try:
-        figures = drill_all(api, settings, report, run_id)
+        # Each layer is drilled whatever happened to the other: a broken
+        # PITR drill must not hide whether the dumps restore, or the reverse.
+        try:
+            figures["pitr"] = drill_all(api, settings, report, run_id)
+        except DrillError as exc:
+            failures.append(f"pitr: {exc}")
+        try:
+            figures["dump"] = dump_drill.drill_all(settings, report)
+        except DrillError as exc:
+            failures.append(f"dump: {exc}")
     finally:
         # Monthly and measured: every run is worth a message, pass or fail.
         report.send(notable=True)
         api.close()
+    if failures:
+        raise DrillError("; ".join(failures))
     return {"service": SERVICE, "drilled": figures}
 
 
