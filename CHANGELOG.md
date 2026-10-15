@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/mini-app-polis/db-ops/compare/v1.4.0...v1.4.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **drill:** count volumes pending deletion as gone, and flag unattached volumes ([8a2dced](https://github.com/mini-app-polis/db-ops/commit/8a2dced65ebd10ac491711e06249007e1a3af39e))
+
 # [1.4.0](https://github.com/mini-app-polis/db-ops/compare/v1.3.2...v1.4.0) (2026-10-15)
 
 
