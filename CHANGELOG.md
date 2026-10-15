@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/mini-app-polis/db-ops/compare/v1.3.2...v1.4.0) (2026-10-15)
+
+
+### Features
+
+* **drill:** restore the latest S3 dumps into a scratch Postgres and verify them ([ef36c4f](https://github.com/mini-app-polis/db-ops/commit/ef36c4f6ed50967f219cf83297282e52d92a913d))
+
 ## [1.3.2](https://github.com/mini-app-polis/db-ops/compare/v1.3.1...v1.3.2) (2026-10-15)
 
 
