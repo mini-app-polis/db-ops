@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/mini-app-polis/db-ops/compare/v1.3.0...v1.3.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **drill:** confirm teardown by reading Railway back, and give deletes time to answer ([f64c393](https://github.com/mini-app-polis/db-ops/commit/f64c393ffaa72cc835712b75e504c7bb75378033))
+
 # [1.3.0](https://github.com/mini-app-polis/db-ops/compare/v1.2.0...v1.3.0) (2026-10-15)
 
 
