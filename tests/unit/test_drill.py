@@ -184,6 +184,11 @@ class Api:
 
     def delete_volume(self, volume_id: str) -> None:
         self.calls.append(("delete_volume", volume_id))
+        if self.delete_sticks:
+            self.volumes = {
+                sid: [v for v in vs if v != volume_id]
+                for sid, vs in self.volumes.items()
+            }
 
     def delete_service(self, service_id: str) -> None:
         self.calls.append(("delete_service", service_id))
@@ -386,6 +391,39 @@ def test_a_teardown_api_failure_is_recorded_not_swallowed() -> None:
 
     assert report.issues["teardown_failed"] == 2
     assert "Not Authorized" in " ".join(report.examples["teardown_failed"])
+
+
+def test_a_delete_that_times_out_but_happens_is_not_a_failure() -> None:
+    # Seen on the first live drill: Railway took longer to answer the
+    # deletes than the request waited, and deleted the fork anyway.
+    api = Api()
+    real_delete_service = api.delete_service
+
+    def slow(service_id: str) -> None:
+        real_delete_service(service_id)
+        raise RailwayApiError("Railway API unreachable: ReadTimeout")
+
+    api.delete_service = slow  # type: ignore[method-assign]
+
+    report, figures = _drill_all(api, Conn(), Conn())
+
+    assert not report.issues
+    assert report.processed == 2
+    assert not any(n.startswith("drill-") for n in api.services)
+
+
+def test_a_volume_left_behind_fails_the_teardown() -> None:
+    api = Api()
+
+    def keep(volume_id: str) -> None:
+        api.calls.append(("delete_volume", volume_id))
+
+    api.delete_volume = keep  # type: ignore[method-assign]
+
+    report, exc = _drill_all(api, Conn(), Conn())
+
+    assert report.issues["teardown_failed"] == 2
+    assert "volume v-drill-" in " ".join(report.examples["teardown_failed"])
 
 
 def test_a_missing_source_service_or_volume_fails_that_database_only() -> None:
