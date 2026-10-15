@@ -1,3 +1,15 @@
+# [1.5.0](https://github.com/mini-app-polis/db-ops/compare/v1.4.1...v1.5.0) (2026-10-15)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.4 ([50de928](https://github.com/mini-app-polis/db-ops/commit/50de9284d6579eb68592f8d35a6156a9c388f692))
+
+
+### Features
+
+* **railway:** declare the db-ops services as IaC, planned on PR and applied by CI ([d9612a9](https://github.com/mini-app-polis/db-ops/commit/d9612a92e627b78908ae45f405fb52c2b49d470f))
+
 ## [1.4.1](https://github.com/mini-app-polis/db-ops/compare/v1.4.0...v1.4.1) (2026-10-15)
 
 
