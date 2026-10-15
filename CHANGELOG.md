@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/mini-app-polis/db-ops/compare/v1.1.0...v1.1.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **backup:** declare settings with pydantic-settings and move the lock-wait timeout into them ([4c0ef1f](https://github.com/mini-app-polis/db-ops/commit/4c0ef1fa974b9be2c1484a7e4203190b3b74c5bf))
+
 # [1.1.0](https://github.com/mini-app-polis/db-ops/compare/v1.0.1...v1.1.0) (2026-10-15)
 
 
