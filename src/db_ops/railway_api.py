@@ -49,6 +49,7 @@ class VolumeInstance:
     instance_id: str
     volume_id: str
     service_id: str | None
+    name: str = ""
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,7 @@ query EnvironmentInstances($environmentId: String!, $projectId: String!) {
       edges { node { serviceId serviceName } }
     }
     volumeInstances(first: 100) {
-      edges { node { id serviceId volume { id } } }
+      edges { node { id serviceId deletedAt isPendingDeletion volume { id name } } }
     }
   }
 }
@@ -218,7 +219,11 @@ class RailwayApi:
     def environment_instances(
         self,
     ) -> tuple[list[ServiceInstance], list[VolumeInstance]]:
-        """Every service and volume in the environment."""
+        """Every service and volume in the environment.
+
+        A volume Railway has accepted for deletion is left out: deleting one
+        is asynchronous, and it can stay listed, pending, for many minutes.
+        """
         data = self.query(
             ENVIRONMENT_INSTANCES,
             {"environmentId": self.environment_id, "projectId": self.project_id},
@@ -233,8 +238,10 @@ class RailwayApi:
                 instance_id=n["id"],
                 volume_id=(n.get("volume") or {}).get("id", ""),
                 service_id=n.get("serviceId"),
+                name=(n.get("volume") or {}).get("name", ""),
             )
             for n in _nodes(env.get("volumeInstances"))
+            if not (n.get("deletedAt") or n.get("isPendingDeletion"))
         ]
         return services, volumes
 
