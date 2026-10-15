@@ -1,0 +1,36 @@
+"""db-backup — pg_dump both production databases to S3.
+
+Filled in by MINI-63.
+
+A stub until then: it boots, logs that it has nothing to do, and
+exits 0, so the Railway service and its start command can be wired up and
+proven before any work is in it.
+
+    python -m db_ops.backup
+"""
+
+from __future__ import annotations
+
+import sys
+from typing import Any
+
+from mini_app_polis import logger as log
+
+from db_ops._entry import run
+
+SERVICE = "db-backup"
+
+LOG = log.get_logger()
+
+
+def work(run_id: str) -> dict[str, Any]:
+    LOG.info("%s.stub run_id=%s nothing to do yet", SERVICE, run_id)
+    return {"service": SERVICE, "stub": True}
+
+
+def main() -> int:
+    return run(SERVICE, work)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

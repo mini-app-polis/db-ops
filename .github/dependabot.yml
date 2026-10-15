@@ -1,0 +1,92 @@
+# Automated dependency updates.
+#
+# The fleet audits dependencies on every build (ecosystem-standards
+# SEC-003), which finds what has gone vulnerable but never fixes it.
+# Clearing those by hand does not scale — one repo needed 45 advisories
+# closed in a single sitting. This is the other half: keep dependencies
+# current so the audit has less to find.
+#
+# `commit-message.prefix` is load-bearing, not cosmetic. Dependabot's
+# default subject is "Bump x from y to z", which is not a Conventional
+# Commit. Every repo here releases through semantic-release, so an
+# unprefixed subject both trips VER-001 and cuts no release — the fix
+# would land on main and never reach the registry.
+#
+# Version updates arrive as at most three pull requests per ecosystem,
+# because a failing bump is easiest to fix when it is not tangled with
+# unrelated ones:
+#   - `commons`: the fleet's own shared packages, every update type,
+#     majors included. We always want the latest commons, so they are
+#     exempt from the cooldown below. A commons release does not wait for
+#     Sunday: common-python-utils and identity trigger commons-update.yml
+#     in mini-app-polis/.github when they publish, which bumps every
+#     consumer the same day. This group is the weekly backstop.
+#   - `majors`: every third-party major in one pull request. Majors are
+#     what break tests; keeping them together and apart from routine bumps
+#     means routine bumps never wait on a migration. If one major is hard,
+#     `@dependabot ignore <dependency> major version` on the pull request
+#     drops it and lets the rest through.
+#   - `minor-and-patch`: everything else.
+# Dependabot puts a dependency in the first group that matches, which is
+# why `commons` is listed first.
+#
+# Dependabot checks once a week, on Sunday. The cooldown holds third-party
+# releases until they are a week old, so a release that gets yanked in its
+# first days never reaches us.
+#
+# GitHub Actions stay in their own pull request so they keep the
+# `ci(deps)` prefix, which cuts no release.
+#
+# `target-branch` points version updates at `dev`, not `main`. An upgrade
+# should land where it can be exercised before a release cuts: `dev`
+# publishes to the Cloudflare preview URL and to the Railway development
+# environment, so a bad bump surfaces there instead of in production.
+#
+# Dependabot reads this file from the *default* branch only, so this
+# config has to be on `main` to take effect even though every
+# version-update pull request targets `dev`.
+#
+# There is deliberately no security-updates entry. Dependabot security
+# updates ignore `target-branch` and open against `main`, where automerge
+# never merges. Security fixes come from dependency-fix.yml in
+# mini-app-polis/.github instead: it runs the same audit CI runs, re-locks
+# what it flags, and opens its pull request into `dev`. Dependabot alerts
+# stay on in the repository settings as an independent list of open
+# advisories.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    cooldown:
+      default-days: 7
+      exclude: ["miniapppolis-*"]
+    open-pull-requests-limit: 5
+    groups:
+      commons:
+        patterns: ["miniapppolis-*"]
+      majors:
+        patterns: ["*"]
+        update-types: ["major"]
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "fix(deps)"
+      prefix-development: "chore(deps)"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(deps)"

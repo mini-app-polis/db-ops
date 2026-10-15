@@ -1,0 +1,63 @@
+[project]
+name = "db-ops"
+dynamic = ["version"]
+description = "Postgres operations for the ecosystem's production databases: metrics (db-poller), nightly dumps (db-backup) and restore drills (db-drill). Three Railway cron services, one run per wake."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "miniapppolis-common-utils>=5,<6",
+    "sentry-sdk>=2.0.0,<3.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy",
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/db_ops/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/db_ops"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["db_ops"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests/unit"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.coverage.report]
+# TEST-019: CI fails below this floor. Raise it as coverage rises; lowering it is a reviewed edit.
+fail_under = 90
+
+[tool.uv]
+# The uv every lock in the fleet is written with. setup-uv reads this in CI,
+# and an older or newer local uv refuses to run instead of rewriting the
+# lock's revision. Upgrading uv is a fleet sweep: bump this everywhere, then
+# re-lock, in commits of their own.
+required-version = "==0.13.0"
