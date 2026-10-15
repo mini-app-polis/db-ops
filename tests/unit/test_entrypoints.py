@@ -35,15 +35,6 @@ def test_each_stub_names_its_own_service_and_exits_zero(
     assert mod.main() == 0
 
 
-STUBS = [s for s in SERVICES if s[0] == "db_ops.drill"]
-
-
-@pytest.mark.parametrize(("module", "service"), STUBS)
-def test_stub_work_reports_itself_as_a_stub(module: str, service: str) -> None:
-    mod = importlib.import_module(module)
-    assert mod.work("run-1") == {"service": service, "stub": True}
-
-
 def test_a_run_that_raises_exits_one_and_is_captured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -45,13 +45,6 @@ deferrals:
       the ceiling; there is no reservation to declare.
     until: null
 
-  - rule: PIPE-011
-    reason: >
-      db-backup (MINI-63) and db-poller (MINI-58) report every run. db-drill
-      is still a stub with no work to report; it adds its RunReport in
-      MINI-64/65. Remove this deferral then.
-    until: null
-
   - rule: PIPE-020
     reason: >
       Looks for Lambda's get_remaining_time_in_millis. There is no Lambda
@@ -65,7 +58,8 @@ deferrals:
       Makes a pipeline cog's liveness layer a dead-letter-queue alarm. There
       is no queue. Liveness comes per service instead: the db-poller's
       DatabaseReachable alarm doubles as its dead-man's switch (MINI-61),
-      and db-backup pings Healthchecks.io (MINI-63).
+      db-backup pings Healthchecks.io (MINI-63), and db-drill sends a run
+      report on every monthly run, pass or fail (MINI-64).
     until: null
 
   - rule: CD-024
@@ -84,5 +78,6 @@ exemptions:
       point-in-time measurement (a repeat is just another sample), db-backup
       writes a dump to a key named by its run time (a second run in a night
       is a second, harmless copy that the S3 lifecycle expires), and db-drill
-      restores into a scratch database it creates and drops within the run.
+      restores into a fork service it creates and deletes within the run,
+      keyed by its own run id.
       Nothing is ingested, so nothing can be ingested twice.
