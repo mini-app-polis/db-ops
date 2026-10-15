@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/mini-app-polis/db-ops/compare/v1.0.1...v1.1.0) (2026-10-15)
+
+
+### Features
+
+* **backup:** nightly pg_dump of both databases to S3 ([ba579cb](https://github.com/mini-app-polis/db-ops/commit/ba579cbe48f6c2bd60919356ef445d186c1efdb3))
+
 ## [1.0.1](https://github.com/mini-app-polis/db-ops/compare/v1.0.0...v1.0.1) (2026-10-15)
 
 
