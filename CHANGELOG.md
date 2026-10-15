@@ -1,3 +1,15 @@
+# [1.2.0](https://github.com/mini-app-polis/db-ops/compare/v1.1.1...v1.2.0) (2026-10-15)
+
+
+### Bug Fixes
+
+* **backup:** warn when Healthchecks rejects a ping, and keep request URLs out of the logs ([a0acd9b](https://github.com/mini-app-polis/db-ops/commit/a0acd9b895ef0539985715b5b8cc10f0a1d18e29))
+
+
+### Features
+
+* **poller:** publish both databases' Postgres metrics to CloudWatch ([2181047](https://github.com/mini-app-polis/db-ops/commit/2181047d5d616cc43f961fa4a62b08d083be08b7))
+
 ## [1.1.1](https://github.com/mini-app-polis/db-ops/compare/v1.1.0...v1.1.1) (2026-10-15)
 
 
