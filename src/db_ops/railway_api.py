@@ -134,6 +134,7 @@ class RailwayApi:
         *,
         url: str = DEFAULT_URL,
         timeout: float = 30,
+        write_timeout: float = 120,
         client: httpx.Client | None = None,
     ) -> None:
         header = (
@@ -145,6 +146,9 @@ class RailwayApi:
         self.environment_id = environment_id
         self._url = url
         self._client = client or httpx.Client(timeout=timeout)
+        # Deleting a volume or a service can take Railway well over the
+        # read timeout to answer, and still happen.
+        self._write_timeout = write_timeout
         self._headers = {**header, "Content-Type": "application/json"}
 
     def close(self) -> None:
@@ -153,12 +157,15 @@ class RailwayApi:
 
     # -- transport ---------------------------------------------------------
 
-    def _post(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+    def _post(
+        self, query: str, variables: dict[str, Any], timeout: float | None = None
+    ) -> dict[str, Any]:
         try:
             response = self._client.post(
                 self._url,
                 json={"query": query, "variables": variables},
                 headers=self._headers,
+                timeout=timeout if timeout else httpx.USE_CLIENT_DEFAULT,
             )
         except httpx.HTTPError as exc:
             raise _Retryable(f"Railway API unreachable: {type(exc).__name__}") from None
@@ -200,7 +207,7 @@ class RailwayApi:
     def mutate(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         """A write. Never retried here: a write that reached Railway ran."""
         try:
-            return self._post(query, variables)
+            return self._post(query, variables, timeout=self._write_timeout)
         except _Retryable as exc:
             raise RailwayApiError(str(exc)) from None
 

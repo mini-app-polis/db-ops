@@ -257,3 +257,16 @@ def test_transport_failures_and_odd_answers_raise() -> None:
     with pytest.raises(RailwayApiError, match="without data"):
         api.delete_volume("v")
     api.close()
+
+
+@respx.mock
+def test_a_write_waits_longer_than_a_read() -> None:
+    route = respx.post(DEFAULT_URL).mock(
+        return_value=httpx.Response(200, json={"data": {"serviceDelete": True}})
+    )
+
+    RailwayApi("tok", "workspace", "proj", "env", write_timeout=95).delete_service(
+        "s-fork"
+    )
+
+    assert route.calls[0].request.extensions["timeout"]["read"] == 95

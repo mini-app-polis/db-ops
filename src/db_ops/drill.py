@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     #: How long one fork may take to appear, restore and promote.
     restore_timeout_seconds: float = 1800
     #: How long to wait for Railway to create, or confirm deleting, a fork.
-    teardown_wait_seconds: float = 180
+    teardown_wait_seconds: float = 300
     poll_interval_seconds: float = 15
     #: Between the canary and the fence; the restore target falls between.
     fence_gap_seconds: float = 2
@@ -366,8 +366,11 @@ def tear_down(api: RailwayApi, name: str, settings: Settings, *, sleep: Sleep) -
     """Delete the fork's volumes, then the fork; return whether there was one.
 
     A requested restore produces a fork even if the drill gave up before it
-    appeared, so a missing fork is waited for. Raises :class:`DrillError`
-    if the deletion cannot be confirmed.
+    appeared, so a missing fork is waited for. A delete call that errors is
+    not the verdict — Railway can take longer to answer than the request
+    waits, and delete anyway — so the outcome is read back: the fork and
+    its volumes must be gone from the environment. Raises
+    :class:`DrillError` if that cannot be confirmed.
     """
     if not name.startswith(FORK_PREFIX):
         raise DrillError(f"refusing to delete {name!r}: not a drill fork")
@@ -382,15 +385,31 @@ def tear_down(api: RailwayApi, name: str, settings: Settings, *, sleep: Sleep) -
 
     # Volumes first: once the service is gone, so is the record of which
     # volumes were its. The Railway CLI deletes in the same order.
-    for volume in api.volumes_of(found.service_id):
-        api.delete_volume(volume.volume_id)
-    api.delete_service(found.service_id)
+    volume_ids = {v.volume_id for v in api.volumes_of(found.service_id)}
+    errors: list[str] = []
+    for volume_id in sorted(volume_ids):
+        _attempt(api.delete_volume, volume_id, errors)
+    _attempt(api.delete_service, found.service_id, errors)
 
-    while api.find_service(name) is not None:
+    while True:
+        services, volumes = api.environment_instances()
+        left = [s.name for s in services if s.name == name] + [
+            f"volume {v.volume_id}" for v in volumes if v.volume_id in volume_ids
+        ]
+        if not left:
+            return True
         if time.monotonic() >= deadline:
-            raise DrillError(f"{name} still exists after deletion")
+            detail = f" (last error: {errors[-1]})" if errors else ""
+            raise DrillError(f"still there after deletion: {', '.join(left)}{detail}")
         sleep(settings.poll_interval_seconds)
-    return True
+
+
+def _attempt(delete: Callable[[str], None], target: str, errors: list[str]) -> None:
+    try:
+        delete(target)
+    except RailwayApiError as exc:
+        LOG.warning("%s.delete_unconfirmed target=%s err=%s", SERVICE, target, exc)
+        errors.append(str(exc)[:200])
 
 
 def stale_forks(api: RailwayApi, now: datetime, settings: Settings) -> list[str]:
