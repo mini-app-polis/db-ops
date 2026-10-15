@@ -45,6 +45,16 @@ deferrals:
       the ceiling; there is no reservation to declare.
     until: null
 
+  - rule: PIPE-011
+    reason: >
+      The three services are stubs with no work to report. Run reporting
+      through mini_app_polis.pipeline_status needs db-ops to have its own
+      named machine key on api-kaianolevine-com (CD-019), which does not
+      exist yet. db-backup adds the key and its RunReport in MINI-63; the
+      poller and drill follow in their own tasks. Remove this deferral when
+      the last of them reports.
+    until: null
+
   - rule: PIPE-020
     reason: >
       Looks for Lambda's get_remaining_time_in_millis. There is no Lambda
