@@ -93,7 +93,15 @@ role (`pg_read_all_data`, and owner of the `ops` schema):
 source's archive-bucket credential, which can write to production's WAL
 archive (Railway has no read-only variant). A fork whose deletion cannot be
 confirmed fails the run, and every run flags any `drill-*` service older
-than an hour.
+than 30 minutes and any volume in production that is mounted on nothing.
+Railway deletes volumes asynchronously; one it has accepted for deletion
+counts as gone.
+
+**Never deploy db-drill, and never touch a `drill-*` service, while a run
+is going.** A deploy stops the running container before its `finally` can
+tear the forks down, and deleting a fork's service by hand leaves its
+volume — a full copy of production — behind. If a run is cut short,
+delete each leftover fork's volume first, then the service.
 
 Then the **S3 dump layer** (MINI-65), for each database: the newest
 `daily/<database>/` dump is downloaded with the read-only key (its age is

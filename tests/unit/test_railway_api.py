@@ -270,3 +270,50 @@ def test_a_write_waits_longer_than_a_read() -> None:
     )
 
     assert route.calls[0].request.extensions["timeout"]["read"] == 95
+
+
+@respx.mock
+def test_a_volume_pending_deletion_counts_as_gone() -> None:
+    respx.post(DEFAULT_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "environment": {
+                        "serviceInstances": {"edges": []},
+                        "volumeInstances": {
+                            "edges": [
+                                {
+                                    "node": {
+                                        "id": "vi-1",
+                                        "serviceId": None,
+                                        "isPendingDeletion": True,
+                                        "volume": {"id": "v-1", "name": "x"},
+                                    }
+                                },
+                                {
+                                    "node": {
+                                        "id": "vi-2",
+                                        "serviceId": None,
+                                        "deletedAt": "2026-10-15T21:10:00Z",
+                                        "volume": {"id": "v-2", "name": "y"},
+                                    }
+                                },
+                                {
+                                    "node": {
+                                        "id": "vi-3",
+                                        "serviceId": None,
+                                        "volume": {"id": "v-3", "name": "kept"},
+                                    }
+                                },
+                            ]
+                        },
+                    }
+                }
+            },
+        )
+    )
+
+    _, volumes = _api().environment_instances()
+
+    assert [(v.volume_id, v.name) for v in volumes] == [("v-3", "kept")]

@@ -470,6 +470,16 @@ def test_old_drill_services_are_flagged_and_new_ones_are_not() -> None:
     ]
 
 
+def test_a_volume_mounted_on_nothing_is_flagged() -> None:
+    # What deleting a fork's service by hand leaves behind.
+    api = Api()
+    api.volumes[None] = ["v-orphan"]  # type: ignore[index]
+
+    report, _ = _drill_all(api, Conn(), Conn())
+
+    assert report.examples["unattached_volume"] == ["v-orphan"]
+
+
 def test_a_failed_stale_check_is_flagged() -> None:
     api = Api()
 

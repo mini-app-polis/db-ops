@@ -23,7 +23,10 @@ A backup nobody has restored is a hope. Once a month, for each database in
    This is not housekeeping. The fork carries the source's PITR archive
    credential, which can write to production's archive, so it must not
    outlive the drill: the run fails if the deletion cannot be confirmed,
-   and every run flags any ``drill-*`` service older than an hour.
+   and every run flags any ``drill-*`` service older than 30 minutes and
+   any production volume mounted on nothing. Nothing in a process can
+   survive the process being stopped, so a deploy during a run is the one
+   way to leave a fork behind (README).
 
 The figures go to the runs channel every time. A failure is a WARN, so it
 also reaches the errors channel, and Sentry, and the run exits 1.
@@ -128,8 +131,9 @@ class Settings(BaseSettings):
     #: A source table with at least this many rows must not be empty in the
     #: fork. A smaller one may have been empty at the target.
     key_table_min_rows: int = 100
-    #: A drill-* service older than this was not torn down.
-    stale_fork_seconds: float = 3600
+    #: A drill-* service older than this was not torn down. A whole run
+    #: takes about fifteen minutes.
+    stale_fork_seconds: float = 1800
 
     # -- the S3 dump drill (MINI-65) --
     #: The off-platform backup bucket, and the read-only key for it
@@ -455,6 +459,18 @@ def _attempt(delete: Callable[[str], None], target: str, errors: list[str]) -> N
         errors.append(str(exc)[:200])
 
 
+def unattached_volumes(api: RailwayApi) -> list[str]:
+    """Volumes in this environment mounted on nothing.
+
+    Deleting a fork's service in the dashboard leaves its volume behind —
+    a full copy of production data, billed, and attached to nothing. Every
+    volume in production belongs to a database, so any unattached one is
+    worth a look.
+    """
+    _, volumes = api.environment_instances()
+    return sorted(v.name or v.volume_id for v in volumes if not v.service_id)
+
+
 def stale_forks(api: RailwayApi, now: datetime, settings: Settings) -> list[str]:
     """``drill-*`` services in this environment older than the stale threshold."""
     services, _ = api.environment_instances()
@@ -609,6 +625,8 @@ def drill_all(
     try:
         for name in stale_forks(api, datetime.now(UTC), settings):
             report.issue("stale_drill_service", name)
+        for name in unattached_volumes(api):
+            report.issue("unattached_volume", name)
     except RailwayApiError as exc:
         report.issue("stale_check_failed", detail=str(exc)[:200])
 
