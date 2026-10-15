@@ -22,9 +22,9 @@ Railpack has no way to add the PostgreSQL project's repository (PGDG).
 
 **A root `Dockerfile`, used by all three services.** `python:3.11-slim-bookworm`
 plus `postgresql-client-18` from PGDG, uv for the locked install, and an
-unprivileged final user. Each service's `railway/<service>.json` selects the
-Dockerfile builder and its own start command, so the three still share
-nothing at runtime but the image.
+unprivileged final user. Each Railway service builds this Dockerfile and runs
+its own start command, so the three still share nothing at runtime but the
+image.
 
 The build fails if the installed `pg_dump` is not the pinned major, so a
 repository change cannot silently hand the services an older client.

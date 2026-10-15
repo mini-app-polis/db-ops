@@ -95,11 +95,24 @@ uv run mypy src/
 
 Railway, `mini-app-polis ecosystem` project, **production environment only**
 — there is nothing for these services to do against the development
-databases. Each service points at its own config file under `railway/`
-(Settings → Config-as-code → `railway/db-poller.json`, and so on), which
-holds the Dockerfile builder, its start command, its cron schedule and
-`restartPolicyType: NEVER`: a cron run that fails is retried by the next
-scheduled run, not by a restart.
+databases. Each service builds the root `Dockerfile` from `main` and is
+configured on the service itself:
+
+| Service | Start command | Cron (UTC) | Restart policy |
+|---|---|---|---|
+| `db-backup` | `python -m db_ops.backup` | `17 9 * * *` | Never |
+| `db-poller` | `python -m db_ops.poller` | set by MINI-58 | Never |
+| `db-drill` | `python -m db_ops.drill` | set by MINI-64 | Never |
+
+A cron run that fails is retried by the next scheduled run, not by a
+restart. These settings live in Railway rather than in this repository:
+Railway no longer accepts a per-service config file path for new services
+(config-as-code is deprecated in favour of `.railway/railway.ts`), and
+moving to that is tracked separately. `tests/integration/test_start_commands.py`
+keeps the start commands on record and proves each one runs.
+
+Each service's variables are references to the environment's shared
+variables (`${{shared.NAME}}`), which Doppler `prd` keeps current.
 
 `main` deploys to production on push; `dev` is where work lands first.
 Versioning is semantic-release from conventional commits.

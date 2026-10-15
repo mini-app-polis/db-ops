@@ -72,8 +72,9 @@ deferrals:
   - rule: CD-024
     reason: >
       Reads memory_size and timeout from the cog's Lambda module block.
-      There is no Lambda function; each service's Railway config file under
-      railway/ is its platform descriptor.
+      There is no Lambda function. Each Railway service's settings and the
+      run budget each service sets on itself (RUN_TIMEOUT_SECONDS) are its
+      ceiling.
     until: null
 
 exemptions:
@@ -86,11 +87,3 @@ exemptions:
       is a second, harmless copy that the S3 lifecycle expires), and db-drill
       restores into a scratch database it creates and drops within the run.
       Nothing is ingested, so nothing can be ingested twice.
-
-layout_exceptions:
-  - path: railway/
-    reason: >
-      One Railway config-as-code file per service — db-poller, db-backup,
-      db-drill — each holding its own start command. A root railway.json
-      would apply to whichever service forgot to set a config path, and
-      three services cannot share one start command. ADR-001.

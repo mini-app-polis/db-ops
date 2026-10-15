@@ -38,9 +38,9 @@ plan doc's Phase 2.
 databases), dependencies (a Postgres driver, AWS credentials, the shared
 logger) and a release cadence, so they share a repository. They do not
 share a process: each is its own Railway service with its own start command
-(`python -m db_ops.poller` / `.backup` / `.drill`) and its own config file
-under `railway/`, so a failing backup can never be hidden by a healthy
-poller, and each is scheduled, alarmed and restarted on its own.
+(`python -m db_ops.poller` / `.backup` / `.drill`), so a failing backup can
+never be hidden by a healthy poller, and each is scheduled, alarmed and
+restarted on its own.
 
 **A cron run is the retry unit.** `restartPolicyType: NEVER`: a failed run
 exits non-zero, reports, and the next scheduled run is the retry.
@@ -58,10 +58,11 @@ metrics; each service gates its work on the environment.
   wiki-curator-cog moves to Lambda, db-ops is the only Railway-hosted cog,
   and if a second repository of this shape appears, the type is what
   should change.
-- Railway's per-service config-as-code path is what gives three services
-  three start commands from one repository. There is deliberately no
-  `railway.json` at the root, where it would apply to whichever service
-  forgot to set a path.
+- Each service's start command, schedule and restart policy are set on the
+  Railway service. The original plan was one config file per service under
+  `railway/`, but Railway refuses a per-service config path for new services
+  (config-as-code is deprecated; amended 2026-10-15, MINI-63). Moving the
+  settings back into the repository as `.railway/railway.ts` is a follow-up.
 - Secrets use per-service names (`SENTRY_DSN_DB_OPS`, and the database and
   AWS names each task adds) because Doppler syncs one shared config to every
   Railway service.
