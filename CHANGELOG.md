@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/mini-app-polis/db-ops/compare/v1.3.1...v1.3.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* evaluator findings on db-ops (docstring, idempotent canary, no-retry note, CD-009 deferral) ([5176d18](https://github.com/mini-app-polis/db-ops/commit/5176d188fae556008ef93adf7c8ff598c4813322))
+
 ## [1.3.1](https://github.com/mini-app-polis/db-ops/compare/v1.3.0...v1.3.1) (2026-10-15)
 
 
