@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/mini-app-polis/db-ops/compare/v1.2.0...v1.3.0) (2026-10-15)
+
+
+### Features
+
+* **drill:** monthly PITR restore drill with measured RPO and RTO ([c36ba71](https://github.com/mini-app-polis/db-ops/commit/c36ba7119ceeada450b5ebfbd39bf0b2d9721229))
+
 # [1.2.0](https://github.com/mini-app-polis/db-ops/compare/v1.1.1...v1.2.0) (2026-10-15)
 
 
