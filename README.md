@@ -125,10 +125,70 @@ It needs a Railway token that may create and delete services:
 by default (`DB_DRILL_RAILWAY_TOKEN_KIND=project`), or a workspace token
 (`workspace`) if a project token is refused.
 
-## Recovery layers this repo serves
+## Recovery record
 
-| Layer | Where | Recovery point | Owned by |
-|---|---|---|---|
+What each production database can be recovered to, from what, and how fast
+— measured by `db-drill`, not estimated (MINI-66). There are two layers. The
+Railway workspace is on the Hobby plan, so there are no volume backups and
+no third layer.
+
+| Database | Layer | RPO | RTO | Last successful drill |
+|---|---|---|---|---|
+| `kaianolevine` (`Postgres`) | Point-in-time recovery — Railway, pgBackRest → Railway bucket | **≤ 1 min** — measured 4–51 s | **≤ 3 min** — measured 136–160 s | 2026-10-15 21:32 UTC |
+| `kaianolevine` (`Postgres`) | Nightly `pg_dump` — S3, off Railway | **≤ 24 h** — the dump drilled was 2.3 h old | **seconds** to restore — measured 1 s for 9.9 MB | 2026-10-15 21:41 UTC |
+| `deejaytools` (`Postgres-deejaytools`) | Point-in-time recovery | **≤ 1 min** — measured 4–49 s | **≤ 3 min** — measured 119–128 s | 2026-10-15 21:37 UTC |
+| `deejaytools` (`Postgres-deejaytools`) | Nightly `pg_dump` | **≤ 24 h** — the dump drilled was 2.3 h old | **seconds** to restore — measured < 1 s for 217 KB | 2026-10-15 21:41 UTC |
+
+How to read it:
+
+- **Point-in-time recovery** is the first choice for anything that goes
+  wrong inside a database — a bad migration, a dropped table, a runaway
+  script. RPO is how far the WAL archive trails the database: the drill
+  writes a canary, measures until its WAL segment is archived, restores to
+  one second after it, and checks the canary is there and the next row is
+  not. `archive_timeout=60` bounds it at about a minute. RTO is from asking
+  Railway for the restore to the fork answering as a promoted primary; it
+  does **not** include cutting the application over to the fork (swapping
+  `DATABASE_URL`), which is manual and undrilled. Restore window: about four
+  weeks (Railway keeps the last four weekly full backups).
+- **The nightly dump** is for when Railway itself is the problem. Its RPO is
+  the age of the newest dump, at most a day plus the run (09:17 UTC daily); a
+  newest dump older than 36 hours fails the drill. Its RTO above is the
+  `pg_restore` into a scratch PostgreSQL 18 only — standing up a new
+  database somewhere to restore into is not part of the drill and would
+  dominate a real recovery.
+- Every figure comes from these runs, all 2026-10-15 (UTC), all verified
+  against the live source (migrations, every table, no emptied tables):
+
+  | Run | Version | PITR `kaianolevine` RPO / RTO | PITR `deejaytools` RPO / RTO | Dump layer |
+  |---|---|---|---|---|
+  | 20:43 | 1.3.0 | 13 s / 160 s | 14 s / 128 s | — (not built yet) |
+  | 21:01 | 1.3.2 | 51 s / 136 s | 4 s / 119 s | — |
+  | 21:20 | 1.4.0 | 4 s / 154 s | cut short by a deploy | — |
+  | 21:32 | 1.4.1 | 24 s / 151 s | 49 s / 119 s | both pass, dumps 2.3 h old |
+
+  Run `e58b74bc` (21:32) is the first clean run of both layers, with
+  teardown confirmed. The evidence is the run reports in the Discord runs
+  channel and the comments on MINI-64 and MINI-65.
+- The drill repeats monthly (09:43 UTC on the 2nd). When a run's figures
+  move outside the ranges above, update this table.
+
+### Erasure and backups (deejaytools)
+
+deejaytools holds real users' data. A row deleted from the live database is
+**not** gone from its backups until they age out:
+
+- point-in-time recovery: up to about **4–5 weeks** (the oldest retained
+  weekly full backup and the WAL after it);
+- nightly dumps in S3: `daily/` up to **38 days** (30-day expiry, then
+  8 days as a noncurrent version), `monthly/` up to **98 days** (90 + 8).
+
+The data-erasure path deejaytools does not have yet must say so: erasure
+reaches the live database at once and the backups when they expire, and
+nothing restored from a backup older than an erasure may be put back into
+service without re-applying it.
+
+---|---|---|---|
 | Point-in-time recovery | Railway (pgBackRest → Railway bucket) | ~1 min, ~4-week window | Railway; drilled by `db-drill` |
 | Nightly logical dump | S3, off Railway | 24 h | `db-backup`; drilled by `db-drill` |
 
