@@ -7,6 +7,11 @@
 # comes from the PostgreSQL project's apt repository (PGDG), which Railpack
 # has no way to add.
 #
+# db-drill also restores the nightly dumps into a throwaway PostgreSQL 18
+# inside its own container (MINI-65), so the server is here too, with
+# pgvector — api-kaianolevine-com's schema uses it — and without the
+# cluster Debian would otherwise create at install.
+#
 # Base images are pinned by digest (CD-022). To move to a newer patch, look
 # up the tag's current digest and replace it here, in a commit of its own.
 
@@ -24,11 +29,17 @@ RUN set -eux; \
     echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends "postgresql-client-${PG_MAJOR}"; \
+    install -d /etc/postgresql-common; \
+    echo "create_main_cluster = false" > /etc/postgresql-common/createcluster.conf; \
+    apt-get install -y --no-install-recommends \
+        "postgresql-client-${PG_MAJOR}" \
+        "postgresql-${PG_MAJOR}" \
+        "postgresql-${PG_MAJOR}-pgvector"; \
     apt-get purge -y curl; \
     apt-get autoremove -y; \
     rm -rf /var/lib/apt/lists/*; \
-    pg_dump --version | grep -q " ${PG_MAJOR}\."
+    pg_dump --version | grep -q " ${PG_MAJOR}\."; \
+    "/usr/lib/postgresql/${PG_MAJOR}/bin/initdb" --version | grep -q " ${PG_MAJOR}\."
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 /uv /usr/local/bin/uv
 
@@ -45,6 +56,7 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
 RUN uv sync --locked --no-dev
 
-# CD-023: the final stage runs unprivileged. Dumps are written under /tmp.
+# CD-023: the final stage runs unprivileged. Dumps are written under /tmp,
+# and so is db-drill's scratch server — initdb refuses to run as root anyway.
 RUN useradd --system --uid 10001 --no-create-home --home-dir /app dbops
 USER dbops

@@ -40,6 +40,9 @@ def _settings(**overrides: Any) -> Settings:
         "teardown_wait_seconds": 0,
         "archive_wait_seconds": 0,
         "restore_timeout_seconds": 60,
+        "db_backup_bucket": "backups",
+        "db_drill_aws_access_key_id": "AKIATEST",
+        "db_drill_aws_secret_access_key": "secret",
     }
     values.update(overrides)
     return Settings(**values)
@@ -527,9 +530,11 @@ class FakeReport:
         self.sent.append(notable)
 
 
-@pytest.mark.parametrize("fails", [False, True])
-def test_every_run_sends_its_report_pass_or_fail(
-    monkeypatch: pytest.MonkeyPatch, fails: bool
+@pytest.mark.parametrize(
+    ("pitr_fails", "dump_fails"), [(False, False), (True, False), (False, True)]
+)
+def test_both_layers_are_drilled_and_every_run_reports(
+    monkeypatch: pytest.MonkeyPatch, pitr_fails: bool, dump_fails: bool
 ) -> None:
     monkeypatch.setenv("DB_DRILL_ENABLED", "true")
     for key, value in _settings().model_dump().items():
@@ -542,18 +547,35 @@ def test_every_run_sends_its_report_pass_or_fail(
         reports.append(FakeReport())
         return reports[-1]
 
+    dump_calls: list[Settings] = []
+
     def _drill_all(api: Any, settings: Settings, report: Any, run_id: str) -> Any:
         assert api._headers["Project-Access-Token"] == "tok"
-        if fails:
+        if pitr_fails:
             raise DrillError("restore failed")
         return {"kaianolevine": {"rto_seconds": 120}}
 
+    def _dump_drill_all(settings: Settings, report: Any) -> Any:
+        dump_calls.append(settings)
+        if dump_fails:
+            raise DrillError("pg_restore exited 1")
+        return {"kaianolevine": {"age_hours": 0.5}}
+
+    from db_ops import dump_drill
+
     monkeypatch.setattr(drill, "RunReport", _new_report)
     monkeypatch.setattr(drill, "drill_all", _drill_all)
+    monkeypatch.setattr(dump_drill, "drill_all", _dump_drill_all)
 
-    if fails:
-        with pytest.raises(DrillError):
+    if pitr_fails or dump_fails:
+        with pytest.raises(DrillError, match="pitr" if pitr_fails else "dump"):
             drill.work("run-1")
     else:
-        assert drill.work("run-1")["drilled"] == {"kaianolevine": {"rto_seconds": 120}}
+        assert drill.work("run-1")["drilled"] == {
+            "pitr": {"kaianolevine": {"rto_seconds": 120}},
+            "dump": {"kaianolevine": {"age_hours": 0.5}},
+        }
+    # A failed PITR drill does not stop the dump drill, and the report goes
+    # out either way.
+    assert len(dump_calls) == 1
     assert reports[0].sent == [True]
