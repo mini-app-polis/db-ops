@@ -4,7 +4,7 @@ The copy that does not live on Railway. Point-in-time recovery covers a bad
 migration or a dropped table, but its archive is a Railway bucket; this is
 the backup for when Railway itself is the problem (MINI-62, MINI-63).
 
-One run, for each database in :data:`DATABASES`:
+One run, for each database in :attr:`Settings.database_urls`:
 
 1. ``pg_dump --format=custom`` over Railway private networking, as the
    dedicated ``backup`` role (``pg_read_all_data`` and nothing else).
@@ -29,7 +29,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -39,6 +38,8 @@ import httpx
 from mini_app_polis import logger as log
 from mini_app_polis.environment import Effect, effect_enabled, is_production
 from mini_app_polis.pipeline_status import RunReport
+from pydantic import SecretStr, ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from db_ops._entry import run
 
@@ -47,58 +48,66 @@ REPO = "db-ops"
 
 LOG = log.get_logger()
 
-#: Database name in the object key -> the variable holding its connection
-#: string. Private networking (``*.railway.internal``) as the ``backup`` role.
-DATABASES: dict[str, str] = {
-    "kaianolevine": "DB_BACKUP_DATABASE_URL_KAIANOLEVINE",
-    "deejaytools": "DB_BACKUP_DATABASE_URL_DEEJAYTOOLS",
-}
-
-BUCKET_VAR = "DB_BACKUP_BUCKET"
-ACCESS_KEY_VAR = "DB_BACKUP_AWS_ACCESS_KEY_ID"
-SECRET_KEY_VAR = "DB_BACKUP_AWS_SECRET_ACCESS_KEY"
-HEALTHCHECKS_VAR = "HEALTHCHECKS_URL_DB_BACKUP"
-
 
 class BackupError(RuntimeError):
     """A backup that did not complete. The message is safe to log."""
 
 
-@dataclass(frozen=True)
-class Settings:
-    """Everything a run reads from the environment, read once."""
+class Settings(BaseSettings):
+    """Everything a run reads from the environment, read once.
 
-    bucket: str
-    access_key_id: str
-    secret_access_key: str
-    region: str
-    database_urls: dict[str, str]
-    healthchecks_url: str | None
+    Field names are the variable names, lowercased. Nothing reads a ``.env``
+    file: values come from the process environment (Doppler ``prd`` through
+    Railway's shared variables). Secrets are ``SecretStr`` so a repr or a
+    validation error can never print one.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    db_backup_database_url_kaianolevine: SecretStr
+    db_backup_database_url_deejaytools: SecretStr
+    db_backup_bucket: str
+    db_backup_aws_access_key_id: SecretStr
+    db_backup_aws_secret_access_key: SecretStr
+    aws_region: str = "us-east-1"
+    healthchecks_url_db_backup: SecretStr | None = None
+    #: Read by mini_app_polis's KaianoApiClient when the run report is sent,
+    #: not by this module. Declared here so the run's whole configuration is
+    #: one contract; a missing key costs the run report, not the backup.
+    db_ops_api_key: SecretStr | None = None
+
     #: The whole run's budget. Railway skips a scheduled start while the
     #: previous run is still going, so a hung dump would take every later
     #: night with it; the run stops itself instead.
-    run_timeout_seconds: float
-    connect_timeout_seconds: int
+    run_timeout_seconds: float = 1800
+    db_connect_timeout_seconds: int = 15
+    #: How long pg_dump waits for a table lock before giving up, rather than
+    #: queueing behind a long migration.
+    db_lock_wait_timeout_seconds: int = 60
+    healthchecks_timeout_seconds: float = 5
+
+    @property
+    def database_urls(self) -> dict[str, str]:
+        """Database name in the object key -> its connection string."""
+        return {
+            "kaianolevine": self.db_backup_database_url_kaianolevine.get_secret_value(),
+            "deejaytools": self.db_backup_database_url_deejaytools.get_secret_value(),
+        }
 
     @classmethod
     def from_env(cls) -> Settings:
         """Read and validate the settings, naming every missing variable."""
-        required = [BUCKET_VAR, ACCESS_KEY_VAR, SECRET_KEY_VAR, *DATABASES.values()]
-        missing = [name for name in required if not os.getenv(name, "").strip()]
-        if missing:
-            raise BackupError(f"missing configuration: {', '.join(missing)}")
-        return cls(
-            bucket=os.environ[BUCKET_VAR].strip(),
-            access_key_id=os.environ[ACCESS_KEY_VAR].strip(),
-            secret_access_key=os.environ[SECRET_KEY_VAR].strip(),
-            region=os.getenv("AWS_REGION", "us-east-1").strip(),
-            database_urls={
-                name: os.environ[var].strip() for name, var in DATABASES.items()
-            },
-            healthchecks_url=os.getenv(HEALTHCHECKS_VAR, "").strip() or None,
-            run_timeout_seconds=float(os.getenv("RUN_TIMEOUT_SECONDS", "1800")),
-            connect_timeout_seconds=int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "15")),
-        )
+        try:
+            # pydantic-settings fills the required fields from the
+            # environment, which mypy cannot see.
+            return cls()  # type: ignore[call-arg]
+        except ValidationError as exc:
+            names = sorted(
+                str(err["loc"][0]).upper() for err in exc.errors() if err["loc"]
+            )
+            raise BackupError(
+                f"invalid or missing configuration: {', '.join(names)}"
+            ) from None
 
 
 def object_keys(database: str, now: datetime) -> list[str]:
@@ -120,17 +129,27 @@ def _enabled() -> bool:
 
 def _ping(settings: Settings, suffix: str = "") -> None:
     """Tell Healthchecks.io a run started, succeeded or failed. Never raises."""
-    if not settings.healthchecks_url or not effect_enabled(Effect.HEALTHCHECKS):
+    if not settings.healthchecks_url_db_backup or not effect_enabled(
+        Effect.HEALTHCHECKS
+    ):
         return
+    url = settings.healthchecks_url_db_backup.get_secret_value().rstrip("/")
     try:
         # no-retry: the ping is not the job, and a missed one costs a late
         # check, not a backup. PIPE-007.
-        httpx.get(settings.healthchecks_url.rstrip("/") + suffix, timeout=5)
+        httpx.get(url + suffix, timeout=settings.healthchecks_timeout_seconds)
     except Exception as exc:  # noqa: BLE001 — the ping is not the job
         LOG.warning("%s.ping_failed suffix=%s err=%s", SERVICE, suffix or "/", exc)
 
 
-def dump(url: str, target: Path, *, timeout: float, connect_timeout: int) -> None:
+def dump(
+    url: str,
+    target: Path,
+    *,
+    timeout: float,
+    connect_timeout: int,
+    lock_wait_timeout: int,
+) -> None:
     """Run pg_dump into ``target``. Raises BackupError without echoing the URL."""
     env = {
         **os.environ,
@@ -142,7 +161,7 @@ def dump(url: str, target: Path, *, timeout: float, connect_timeout: int) -> Non
             [
                 "pg_dump",
                 "--format=custom",
-                "--lock-wait-timeout=60s",
+                f"--lock-wait-timeout={lock_wait_timeout}s",
                 f"--file={target}",
                 f"--dbname={url}",
             ],
@@ -169,7 +188,7 @@ def upload(client: Any, settings: Settings, source: Path, key: str) -> None:
     # and the next night is the retry for anything worse.
     client.upload_file(
         str(source),
-        settings.bucket,
+        settings.db_backup_bucket,
         key,
         ExtraArgs={"ChecksumAlgorithm": "SHA256"},
     )
@@ -178,9 +197,11 @@ def upload(client: Any, settings: Settings, source: Path, key: str) -> None:
 def _s3_client(settings: Settings) -> Any:
     return boto3.client(
         "s3",
-        region_name=settings.region,
-        aws_access_key_id=settings.access_key_id,
-        aws_secret_access_key=settings.secret_access_key,
+        region_name=settings.aws_region,
+        aws_access_key_id=settings.db_backup_aws_access_key_id.get_secret_value(),
+        aws_secret_access_key=(
+            settings.db_backup_aws_secret_access_key.get_secret_value()
+        ),
     )
 
 
@@ -208,7 +229,8 @@ def back_up(settings: Settings, report: RunReport, now: datetime) -> list[str]:
                     url,
                     target,
                     timeout=remaining,
-                    connect_timeout=settings.connect_timeout_seconds,
+                    connect_timeout=settings.db_connect_timeout_seconds,
+                    lock_wait_timeout=settings.db_lock_wait_timeout_seconds,
                 )
                 size = target.stat().st_size
                 for key in object_keys(database, now):
