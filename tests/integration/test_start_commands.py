@@ -43,3 +43,9 @@ def test_start_command_runs_and_exits_zero(service: str, run_module: Runner) -> 
 def test_cron_runs_are_not_restarted(service: str) -> None:
     config = json.loads((RAILWAY_DIR / f"{service}.json").read_text())
     assert config["deploy"]["restartPolicyType"] == "NEVER"
+
+
+@pytest.mark.parametrize("service", SERVICES)
+def test_every_service_builds_the_one_image(service: str) -> None:
+    config = json.loads((RAILWAY_DIR / f"{service}.json").read_text())
+    assert config["build"] == {"builder": "DOCKERFILE", "dockerfilePath": "Dockerfile"}

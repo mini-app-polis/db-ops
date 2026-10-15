@@ -35,7 +35,10 @@ def test_each_stub_names_its_own_service_and_exits_zero(
     assert mod.main() == 0
 
 
-@pytest.mark.parametrize(("module", "service"), SERVICES)
+STUBS = [s for s in SERVICES if s[0] != "db_ops.backup"]
+
+
+@pytest.mark.parametrize(("module", "service"), STUBS)
 def test_stub_work_reports_itself_as_a_stub(module: str, service: str) -> None:
     mod = importlib.import_module(module)
     assert mod.work("run-1") == {"service": service, "stub": True}

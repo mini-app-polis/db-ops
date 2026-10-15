@@ -1,0 +1,311 @@
+"""db-backup: what it writes where, and what a failure does.
+
+pg_dump and S3 are replaced at their seams (``dump`` and the S3 client), so
+these run with no database, no AWS and no secrets.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import httpx
+import pytest
+import respx
+
+from db_ops import backup
+from db_ops.backup import BackupError, Settings, object_keys
+
+URLS = {
+    "kaianolevine": "postgresql://backup@postgres.railway.internal/railway",
+    "deejaytools": "postgresql://backup@postgres-twzl.railway.internal/railway",
+}
+
+
+def _settings(**overrides: Any) -> Settings:
+    values: dict[str, Any] = {
+        "bucket": "mini-app-polis-db-backups-test",
+        "access_key_id": "AKIATEST",
+        "secret_access_key": "secret",
+        "region": "us-east-1",
+        "database_urls": dict(URLS),
+        "healthchecks_url": "https://hc-ping.com/test-check",
+        "run_timeout_seconds": 60.0,
+        "connect_timeout_seconds": 5,
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+class FakeS3:
+    def __init__(self, fail_on: str | None = None) -> None:
+        self.uploads: list[tuple[str, str, dict[str, Any]]] = []
+        self.fail_on = fail_on
+
+    def upload_file(
+        self, source: str, bucket: str, key: str, ExtraArgs: dict[str, Any]
+    ) -> None:  # noqa: N803 — boto3's spelling
+        if self.fail_on and self.fail_on in key:
+            raise RuntimeError("AccessDenied")
+        assert Path(source).exists()
+        self.uploads.append((bucket, key, ExtraArgs))
+
+
+class FakeReport:
+    def __init__(self) -> None:
+        self.created_items: list[str] = []
+        self.issues: list[tuple[str, str | None]] = []
+        self.sent: list[bool] = []
+        self.processed = 0
+        self.counters: dict[str, Any] = {}
+
+    def created(self, kind: str, item: str | None = None) -> None:
+        self.created_items.append(f"{kind}:{item}")
+
+    def issue(
+        self, reason: str, item: str | None = None, *, detail: str | None = None
+    ) -> None:
+        self.issues.append((reason, item))
+
+    def ok(self, n: int = 1) -> None:
+        self.processed += n
+
+    def count(self, key: str, value: Any) -> None:
+        self.counters[key] = value
+
+    def send(self, *, notable: bool = False) -> None:
+        self.sent.append(notable)
+
+
+@pytest.fixture
+def fake_dump(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Replace pg_dump with a file write; record which URLs were dumped."""
+    dumped: list[str] = []
+
+    def _dump(url: str, target: Path, *, timeout: float, connect_timeout: int) -> None:
+        if "fail" in url:
+            raise BackupError("pg_dump exited 1: connection refused")
+        target.write_bytes(b"PGDMP fake")
+        dumped.append(url)
+
+    monkeypatch.setattr(backup, "dump", _dump)
+    return dumped
+
+
+# ── Object keys: the contract with the bucket's lifecycle ────────────────
+
+
+def test_an_ordinary_day_writes_only_a_daily_key() -> None:
+    now = datetime(2026, 10, 15, 9, 17, 3, tzinfo=UTC)
+    assert object_keys("deejaytools", now) == [
+        "daily/deejaytools/2026-10-15T091703Z.dump"
+    ]
+
+
+def test_the_first_of_the_month_also_writes_a_monthly_key() -> None:
+    now = datetime(2026, 11, 1, 9, 17, 3, tzinfo=UTC)
+    assert object_keys("kaianolevine", now) == [
+        "daily/kaianolevine/2026-11-01T091703Z.dump",
+        "monthly/kaianolevine/2026-11-01T091703Z.dump",
+    ]
+
+
+# ── A run ─────────────────────────────────────────────────────────────────
+
+
+def test_both_databases_are_uploaded_with_a_checksum(
+    monkeypatch: pytest.MonkeyPatch, fake_dump: list[str]
+) -> None:
+    s3 = FakeS3()
+    monkeypatch.setattr(backup, "_s3_client", lambda settings: s3)
+    report = FakeReport()
+
+    written = backup.back_up(
+        _settings(),
+        report,
+        datetime(2026, 10, 15, tzinfo=UTC),  # type: ignore[arg-type]
+    )
+
+    assert sorted(fake_dump) == sorted(URLS.values())
+    assert written == [
+        "daily/kaianolevine/2026-10-15T000000Z.dump",
+        "daily/deejaytools/2026-10-15T000000Z.dump",
+    ]
+    assert {u[0] for u in s3.uploads} == {"mini-app-polis-db-backups-test"}
+    assert all(u[2] == {"ChecksumAlgorithm": "SHA256"} for u in s3.uploads)
+    assert report.processed == 2 and report.issues == []
+
+
+def test_one_failure_does_not_stop_the_other_database(
+    monkeypatch: pytest.MonkeyPatch, fake_dump: list[str]
+) -> None:
+    s3 = FakeS3()
+    monkeypatch.setattr(backup, "_s3_client", lambda settings: s3)
+    report = FakeReport()
+    urls = {"kaianolevine": "postgresql://fail", "deejaytools": URLS["deejaytools"]}
+
+    with pytest.raises(BackupError, match="kaianolevine"):
+        backup.back_up(
+            _settings(database_urls=urls),
+            report,  # type: ignore[arg-type]
+            datetime(2026, 10, 15, tzinfo=UTC),
+        )
+
+    assert [u[1] for u in s3.uploads] == ["daily/deejaytools/2026-10-15T000000Z.dump"]
+    assert report.issues == [("backup_failed", "kaianolevine")]
+
+
+def test_a_failed_upload_fails_the_run(
+    monkeypatch: pytest.MonkeyPatch, fake_dump: list[str]
+) -> None:
+    monkeypatch.setattr(backup, "_s3_client", lambda settings: FakeS3("deejaytools"))
+    report = FakeReport()
+
+    with pytest.raises(BackupError, match="deejaytools"):
+        backup.back_up(
+            _settings(),
+            report,
+            datetime(2026, 10, 15, tzinfo=UTC),  # type: ignore[arg-type]
+        )
+    assert ("backup_failed", "deejaytools") in report.issues
+
+
+def test_an_exhausted_budget_skips_the_rest(
+    monkeypatch: pytest.MonkeyPatch, fake_dump: list[str]
+) -> None:
+    monkeypatch.setattr(backup, "_s3_client", lambda settings: FakeS3())
+    report = FakeReport()
+
+    with pytest.raises(BackupError):
+        backup.back_up(
+            _settings(run_timeout_seconds=0),
+            report,  # type: ignore[arg-type]
+            datetime(2026, 10, 15, tzinfo=UTC),
+        )
+    assert fake_dump == []
+    assert {reason for reason, _ in report.issues} == {"out_of_time"}
+
+
+# ── Configuration and gating ─────────────────────────────────────────────
+
+
+def test_missing_configuration_names_every_missing_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in [
+        backup.BUCKET_VAR,
+        backup.ACCESS_KEY_VAR,
+        backup.SECRET_KEY_VAR,
+        *backup.DATABASES.values(),
+    ]:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(backup.BUCKET_VAR, "bucket")
+
+    with pytest.raises(BackupError) as caught:
+        Settings.from_env()
+    message = str(caught.value)
+    assert backup.BUCKET_VAR not in message
+    assert backup.ACCESS_KEY_VAR in message
+    assert "DB_BACKUP_DATABASE_URL_DEEJAYTOOLS" in message
+
+
+def test_outside_production_the_run_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("DB_BACKUP_ENABLED", raising=False)
+    assert backup.work("run-1") == {"service": "db-backup", "skipped": True}
+
+
+def test_dump_raises_without_echoing_the_connection_string(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    secret_url = "postgresql://backup:s3cret@postgres.railway.internal/railway"
+    calls: list[list[str]] = []
+
+    def _run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(
+            args, 1, "", 'pg_dump: error: connection to server failed: role "backup"'
+        )
+
+    monkeypatch.setattr(backup.subprocess, "run", _run)
+    with pytest.raises(BackupError) as caught:
+        backup.dump(secret_url, tmp_path / "x.dump", timeout=10, connect_timeout=1)
+    assert "s3cret" not in str(caught.value)
+    assert "--format=custom" in calls[0]
+
+
+def test_a_missing_pg_dump_is_a_backup_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def _run(args: list[str], **kwargs: Any) -> None:
+        raise FileNotFoundError("pg_dump")
+
+    monkeypatch.setattr(backup.subprocess, "run", _run)
+    with pytest.raises(BackupError, match="not installed"):
+        backup.dump(
+            "postgresql://x", tmp_path / "x.dump", timeout=10, connect_timeout=1
+        )
+
+
+def test_a_hung_dump_is_stopped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def _run(args: list[str], **kwargs: Any) -> None:
+        raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+
+    monkeypatch.setattr(backup.subprocess, "run", _run)
+    with pytest.raises(BackupError, match="did not finish"):
+        backup.dump(
+            "postgresql://x", tmp_path / "x.dump", timeout=10, connect_timeout=1
+        )
+
+
+@respx.mock
+def test_pings_are_sent_only_when_the_effect_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    route = respx.get(url__startswith="https://hc-ping.com/test-check").mock(
+        return_value=httpx.Response(200)
+    )
+    monkeypatch.setenv("HEALTHCHECKS_ENABLED", "false")
+    backup._ping(_settings(), "/start")
+    assert route.call_count == 0
+
+    monkeypatch.setenv("HEALTHCHECKS_ENABLED", "true")
+    backup._ping(_settings(), "/fail")
+    assert route.call_count == 1
+    assert str(route.calls[0].request.url).endswith("/test-check/fail")
+
+
+def test_a_failed_run_reports_and_pings_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(backup, "_enabled", lambda: True)
+    monkeypatch.setattr(
+        backup.Settings, "from_env", classmethod(lambda cls: _settings())
+    )
+    pings: list[str] = []
+    monkeypatch.setattr(
+        backup, "_ping", lambda settings, suffix="": pings.append(suffix)
+    )
+    reports: list[FakeReport] = []
+
+    def _report(**kwargs: Any) -> FakeReport:
+        reports.append(FakeReport())
+        return reports[-1]
+
+    monkeypatch.setattr(backup, "RunReport", _report)
+
+    def _boom(settings: Settings, report: Any, now: datetime) -> list[str]:
+        raise BackupError("backup failed for: deejaytools")
+
+    monkeypatch.setattr(backup, "back_up", _boom)
+
+    with pytest.raises(BackupError):
+        backup.work("run-1")
+    assert pings == ["/start", "/fail"]
+    assert reports[0].sent == [True]
