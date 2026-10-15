@@ -137,6 +137,8 @@ class RailwayApi:
         write_timeout: float = 120,
         client: httpx.Client | None = None,
     ) -> None:
+        # no-retry: this builds the client and calls nothing. Reads are
+        # retried in query(); writes are deliberately not, in mutate().
         header = (
             {"Project-Access-Token": token}
             if kind == "project"
