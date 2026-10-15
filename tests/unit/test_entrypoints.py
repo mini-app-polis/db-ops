@@ -35,7 +35,7 @@ def test_each_stub_names_its_own_service_and_exits_zero(
     assert mod.main() == 0
 
 
-STUBS = [s for s in SERVICES if s[0] != "db_ops.backup"]
+STUBS = [s for s in SERVICES if s[0] == "db_ops.drill"]
 
 
 @pytest.mark.parametrize(("module", "service"), STUBS)

@@ -47,10 +47,9 @@ deferrals:
 
   - rule: PIPE-011
     reason: >
-      db-backup reports every run (MINI-63). db-poller and db-drill are
-      still stubs with no work to report; each adds its RunReport in its own
-      task (MINI-58, MINI-64/65). Remove this deferral when the last of them
-      reports.
+      db-backup (MINI-63) and db-poller (MINI-58) report every run. db-drill
+      is still a stub with no work to report; it adds its RunReport in
+      MINI-64/65. Remove this deferral then.
     until: null
 
   - rule: PIPE-020
