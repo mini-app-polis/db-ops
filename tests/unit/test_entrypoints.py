@@ -89,3 +89,11 @@ def test_sentry_initialises_only_when_its_own_dsn_is_set(
     _entry._init_sentry("db-test")
     assert calls[0]["dsn"] == "https://key@sentry.example/1"
     assert tags == [("service", "db-test")]
+
+
+def test_request_urls_are_kept_out_of_the_logs() -> None:
+    import logging
+
+    assert _entry.run("db-test", lambda run_id: {}) == 0
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING
