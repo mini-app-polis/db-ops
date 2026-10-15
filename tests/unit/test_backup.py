@@ -326,3 +326,19 @@ def test_a_failed_run_reports_and_pings_fail(
         backup.work("run-1")
     assert pings == ["/start", "/fail"]
     assert reports[0].sent == [True]
+
+
+@respx.mock
+def test_a_rejected_ping_is_logged_as_a_warning(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    respx.get(url__startswith="https://hc-ping.com/test-check").mock(
+        return_value=httpx.Response(400)
+    )
+    monkeypatch.setenv("HEALTHCHECKS_ENABLED", "true")
+
+    with caplog.at_level("WARNING"):
+        backup._ping(_settings(), "/start")
+
+    assert "ping_rejected" in caplog.text
+    assert "status=400" in caplog.text

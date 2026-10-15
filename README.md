@@ -14,9 +14,9 @@ own start command so a failure in one can never hide in another:
 | `db-backup` | `python -m db_ops.backup` | Nightly `pg_dump -Fc` of both databases to S3 — the copy that is not on Railway | MINI-63 |
 | `db-drill` | `python -m db_ops.drill` | Restores the latest PITR point and S3 dump into scratch databases and verifies them | MINI-64, MINI-65 |
 
-`db-backup` is live (MINI-63). `db-poller` and `db-drill` are still stubs:
-each boots, logs that it has nothing to do, and exits 0, until its own task
-fills it in and creates its Railway service.
+`db-backup` (MINI-63) and `db-poller` (MINI-58) are live. `db-drill` is
+still a stub: it boots, logs that it has nothing to do, and exits 0, until
+MINI-64/65 fill it in and create its Railway service.
 
 All three run from one image, built from the root `Dockerfile`, which brings
 the PostgreSQL 18 client tools (`pg_dump`, `pg_restore`) from the PostgreSQL
@@ -46,6 +46,27 @@ a run that raises exits 1 and no run may hang. See
 is Railway rather than Lambda and one repository rather than three.
 
 ---
+
+## db-poller
+
+Every 5 minutes. For each database, as the `metrics` role (`pg_monitor`,
+nothing else) over private networking, it reads ten values and publishes
+them in one `PutMetricData` under `MiniAppPolis/Postgres`, dimension
+`Database`:
+
+| Metric | Unit | Source |
+|---|---|---|
+| `Connections`, `ConnectionUtilization` | Count, Percent | `pg_stat_activity` against `max_connections` |
+| `DatabaseSize` | Bytes | `pg_database_size` |
+| `CacheHitRatio` | Percent | `pg_stat_database` |
+| `OldestTransactionAge` | Seconds | `pg_stat_activity` |
+| `StatementCalls`, `StatementExecTime` | Count, Milliseconds | `pg_stat_statements` totals; mean = `DIFF(time)/DIFF(calls)` in CloudWatch |
+| `ArchiveFailedCount`, `ArchiveAge` | Count, Seconds | `pg_stat_archiver` (PITR's WAL archive) |
+| `WalDirSize` | Bytes | `pg_ls_waldir()` |
+
+A database it cannot reach publishes nothing for itself, which is what the
+`DatabaseReachable` alarm (MINI-61) watches for; a failed publish fails the
+run. Production only, through `Effect.CLOUDWATCH_METRICS`.
 
 ## Recovery layers this repo serves
 
@@ -101,7 +122,7 @@ configured on the service itself:
 | Service | Start command | Cron (UTC) | Restart policy |
 |---|---|---|---|
 | `db-backup` | `python -m db_ops.backup` | `17 9 * * *` | Never |
-| `db-poller` | `python -m db_ops.poller` | set by MINI-58 | Never |
+| `db-poller` | `python -m db_ops.poller` | `*/5 * * * *` | Never |
 | `db-drill` | `python -m db_ops.drill` | set by MINI-64 | Never |
 
 A cron run that fails is retried by the next scheduled run, not by a

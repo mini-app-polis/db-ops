@@ -13,6 +13,7 @@ run must never hang — each service's own work sets its deadlines.
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from collections.abc import Callable
@@ -46,6 +47,17 @@ def _init_sentry(service: str) -> None:
     sentry_sdk.get_global_scope().set_tag("service", service)
 
 
+def _quiet_http_client_logs() -> None:
+    """Keep request URLs out of the logs.
+
+    httpx and httpcore log every request URL at INFO. Some of the URLs a run
+    calls carry their own credential in the path — a Healthchecks.io ping
+    URL is enough to mark a check up or down — so they stay at WARNING.
+    """
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def run(service: str, work: Work) -> int:
     """Run ``work`` once for ``service`` and return the process exit code.
 
@@ -56,6 +68,7 @@ def run(service: str, work: Work) -> int:
     # Minted before anything else, so the id is in the first log line —
     # the one a run that dies during setup still writes.
     run_id = str(uuid.uuid4())
+    _quiet_http_client_logs()
     _init_sentry(service)
     LOG.info(
         "%s.boot env=%s version=%s run_id=%s",

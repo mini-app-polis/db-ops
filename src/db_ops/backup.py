@@ -137,9 +137,21 @@ def _ping(settings: Settings, suffix: str = "") -> None:
     try:
         # no-retry: the ping is not the job, and a missed one costs a late
         # check, not a backup. PIPE-007.
-        httpx.get(url + suffix, timeout=settings.healthchecks_timeout_seconds)
+        response = httpx.get(
+            url + suffix, timeout=settings.healthchecks_timeout_seconds
+        )
     except Exception as exc:  # noqa: BLE001 — the ping is not the job
         LOG.warning("%s.ping_failed suffix=%s err=%s", SERVICE, suffix or "/", exc)
+        return
+    # Healthchecks answers 4xx for a malformed or unknown check URL, and an
+    # unheard ping is the failure it exists to catch — say so loudly.
+    if response.is_error:
+        LOG.warning(
+            "%s.ping_rejected suffix=%s status=%d",
+            SERVICE,
+            suffix or "/",
+            response.status_code,
+        )
 
 
 def dump(
