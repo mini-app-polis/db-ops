@@ -1,0 +1,14 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  # SEC-001. Database connection strings reach this repo's runtime through
+  # Doppler; this stops one being pasted into a file and committed. Bypassable
+  # with --no-verify — the CI gitleaks pass over full history is the control.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks

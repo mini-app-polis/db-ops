@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Delegates to the fleet's shared security workflow: gitleaks over full
+  # history, the dependency audit against the resolved set, and semgrep.
+  security:
+    uses: mini-app-polis/.github/.github/workflows/security.yml@v3
+    with:
+      language: python
+      package-manager: uv
+
+  # Lock check, lint, format, typecheck and coverage, from the shared
+  # workflow so every cog's `test` stage is the same stage (CD-026).
+  test:
+    uses: mini-app-polis/.github/.github/workflows/python-test.yml@v3
+    with:
+      # TEST-006: coverage measured on every run, reported in the terminal.
+      pytest-args: "--cov=db_ops --cov-report=term-missing"
+      # TEST-012: typechecked against [tool.mypy].
+      typecheck: "uv run mypy src/"
+      # No terraform-dir: this repo owns no infrastructure (ADR-010).
+
+  release:
+    name: Release
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install semantic-release plugins
+        run: |
+          npm install --no-save \
+            semantic-release \
+            @semantic-release/changelog \
+            @semantic-release/commit-analyzer \
+            @semantic-release/exec \
+            @semantic-release/git \
+            @semantic-release/github \
+            @semantic-release/release-notes-generator
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+  # Conformance is graded when the repository changes, and this is where
+  # that is said. The evaluation runs after this job ends, so what the job
+  # reports is whether the request landed — never what was found.
+  #
+  # The repo is `status: development` in the registry, so the fleet sweep
+  # skips it and this job is the only evaluation it gets.
+  evaluate:
+    needs: release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    uses: mini-app-polis/.github/.github/workflows/evaluate.yml@v3
+    secrets:
+      api-key: ${{ secrets.CI_VALIDATOR_API_KEY }}
