@@ -1,0 +1,46 @@
+# Plans db-ops' Railway Infrastructure as Code (.railway/railway.ts) on every
+# pull request into main that changes it, and pins that plan for the apply
+# on merge (railway-apply.yml). The plan is posted to the pull request as a
+# comment; reading it is the review, and merging is the approval. Nothing is
+# ever applied from a workstation. MINI-67.
+name: Railway plan
+
+on:
+  pull_request:
+    branches: [main]
+    paths: [".railway/**"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: railway-config-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    # Fork pull requests get no secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # The SDK the CLI evaluates railway.ts with lives in .railway/, not at
+      # the root of a Python repository, so the action's own install (which
+      # looks at the root) is turned off below.
+      - name: Install the Railway IaC SDK
+        run: npm ci --prefix .railway --no-audit --no-fund
+
+      - uses: railwayapp/config@v1.2.0
+        with:
+          command: plan
+          # A project token for the ecosystem project's production
+          # environment: it can plan and apply there and nowhere else.
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          package-manager: none
+          cli-version: "5.68.0"

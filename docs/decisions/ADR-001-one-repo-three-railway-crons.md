@@ -58,11 +58,17 @@ metrics; each service gates its work on the environment.
   wiki-curator-cog moves to Lambda, db-ops is the only Railway-hosted cog,
   and if a second repository of this shape appears, the type is what
   should change.
-- Each service's start command, schedule and restart policy are set on the
-  Railway service. The original plan was one config file per service under
-  `railway/`, but Railway refuses a per-service config path for new services
-  (config-as-code is deprecated; amended 2026-10-15, MINI-63). Moving the
-  settings back into the repository as `.railway/railway.ts` is a follow-up.
+- Each service's source, build, start command, schedule, restart policy,
+  region and variable references are declared in `.railway/railway.ts`
+  (Railway Infrastructure as Code), planned on the pull request into
+  `main` and applied by CI when it merges — never from a workstation.
+  The original plan was one config file per service under `railway/`, but
+  Railway refuses a per-service config path for new services
+  (config-as-code is deprecated, and stops being read on 2026-12-01;
+  amended 2026-10-15, MINI-63). The file is a named partial, `db-ops`,
+  because the ecosystem project holds services from other repositories:
+  it owns these three and cannot touch the rest (amended 2026-10-15,
+  MINI-67).
 - Secrets use per-service names (`SENTRY_DSN_DB_OPS`, and the database and
   AWS names each task adds) because Doppler syncs one shared config to every
   Railway service.
