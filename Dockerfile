@@ -1,5 +1,5 @@
 # One image for all three db-ops services; each Railway service picks its
-# own start command (railway/<service>.json). See ADR-002.
+# own start command (.railway/railway.ts). See ADR-002.
 #
 # Why an image rather than Railpack: db-backup and db-drill need pg_dump and
 # pg_restore at the servers' major version, 18, and pg_dump refuses to dump

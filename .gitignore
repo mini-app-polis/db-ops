@@ -10,6 +10,9 @@ htmlcov/
 dist/
 *.egg-info/
 
+# The Railway IaC SDK, installed with `npm ci --prefix .railway`.
+.railway/node_modules/
+
 # Database dumps never belong in git, wherever they are written from.
 *.dump
 *.sql.gz

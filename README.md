@@ -233,8 +233,10 @@ uv run mypy src/
 
 Railway, `mini-app-polis ecosystem` project, **production environment only**
 — there is nothing for these services to do against the development
-databases. Each service builds the root `Dockerfile` from `main` and is
-configured on the service itself:
+databases. Each service builds the root `Dockerfile` from `main`, and all
+three are declared in [`.railway/railway.ts`](.railway/railway.ts) — Railway
+Infrastructure as Code, a named partial (`db-ops`) that manages these three
+services and nothing else in the project:
 
 | Service | Start command | Cron (UTC) | Restart policy |
 |---|---|---|---|
@@ -243,14 +245,30 @@ configured on the service itself:
 | `db-drill` | `python -m db_ops.drill` | `43 9 2 * *` | Never |
 
 A cron run that fails is retried by the next scheduled run, not by a
-restart. These settings live in Railway rather than in this repository:
-Railway no longer accepts a per-service config file path for new services
-(config-as-code is deprecated in favour of `.railway/railway.ts`), and
-moving to that is tracked separately. `tests/integration/test_start_commands.py`
-keeps the start commands on record and proves each one runs.
+restart. `tests/integration/test_start_commands.py` proves each start
+command runs.
+
+`.railway/` is applied by CI and never from a workstation. A pull request
+into `main` that changes it runs `railway-plan.yml`, which posts the plan
+as a comment and pins it; merging the pull request runs
+`railway-apply.yml`, which applies exactly that plan. If the environment
+changed after the plan (a dashboard edit) or `.railway/` changed before the
+merge, the apply fails and the pull request needs a fresh plan — what was
+reviewed is what lands. Railway itself does not read `.railway/` when it
+deploys.
+
+Read the plan comment before merging: a service missing from the file is
+deleted. The apply refuses to run on the 2nd between 09:00 and 10:59 UTC,
+because changing db-drill redeploys it, and a redeploy stops a running
+drill before its forks are torn down; re-run the job afterwards.
+
+The workflows authenticate with the `RAILWAY_TOKEN` repository secret: a
+Railway project token for the ecosystem project's production environment,
+which can plan and apply there and nowhere else.
 
 Each service's variables are references to the environment's shared
-variables (`${{shared.NAME}}`), which Doppler `prd` keeps current.
+variables (`${{shared.NAME}}`), which Doppler `prd` keeps current; the file
+declares the names, never a value.
 
 `main` deploys to production on push; `dev` is where work lands first.
 Versioning is semantic-release from conventional commits.
