@@ -12,11 +12,10 @@ own start command so a failure in one can never hide in another:
 |---|---|---|---|
 | `db-poller` | `python -m db_ops.poller` | Publishes both databases' metrics to CloudWatch, `MiniAppPolis/Postgres` | MINI-58 |
 | `db-backup` | `python -m db_ops.backup` | Nightly `pg_dump -Fc` of both databases to S3 — the copy that is not on Railway | MINI-63 |
-| `db-drill` | `python -m db_ops.drill` | Restores the latest PITR point and S3 dump into scratch databases and verifies them | MINI-64, MINI-65 |
+| `db-drill` | `python -m db_ops.drill` | Monthly: restores a point-in-time fork of each database, verifies it, deletes it, and reports the measured RPO and RTO (the S3 dump drill joins in MINI-65) | MINI-64, MINI-65 |
 
-`db-backup` (MINI-63) and `db-poller` (MINI-58) are live. `db-drill` is
-still a stub: it boots, logs that it has nothing to do, and exits 0, until
-MINI-64/65 fill it in and create its Railway service.
+`db-backup` (MINI-63) and `db-poller` (MINI-58) are live. `db-drill` drills
+point-in-time recovery (MINI-64); the S3 dump drill joins it in MINI-65.
 
 All three run from one image, built from the root `Dockerfile`, which brings
 the PostgreSQL 18 client tools (`pg_dump`, `pg_restore`) from the PostgreSQL
@@ -67,6 +66,44 @@ them in one `PutMetricData` under `MiniAppPolis/Postgres`, dimension
 A database it cannot reach publishes nothing for itself, which is what the
 `DatabaseReachable` alarm (MINI-61) watches for; a failed publish fails the
 run. Production only, through `Effect.CLOUDWATCH_METRICS`.
+
+## db-drill
+
+Monthly, 09:43 UTC on the 2nd. For each database in turn, as the `drill`
+role (`pg_read_all_data`, and owner of the `ops` schema):
+
+1. Writes a **canary** row to `ops.drill_canary`, reads the database clock,
+   waits two seconds and writes a **fence** row. The restore target is one
+   second after the canary.
+2. Waits for `pg_stat_archiver` to show the fence's WAL segment archived.
+   Canary to archived is the **measured RPO**.
+3. Asks Railway for a point-in-time restore to the target, into a new
+   service `drill-<database>-<UTC minute>` (Railway's public API,
+   `volumeInstancePITRRestore`). The source keeps running untouched.
+4. Polls until the fork has a private host and answers as a promoted
+   primary. Request to promoted is the **measured RTO**.
+5. Verifies over private networking: the canary is in the fork and the
+   fence is not; `schema_migrations` matches the source; every source table
+   exists in the fork, and none with 100 or more rows on the source is
+   empty in it.
+6. Deletes the fork's volume, then the fork, in a `finally`, and waits for
+   Railway to confirm it is gone.
+
+**The teardown is the point of the design.** A PITR fork carries the
+source's archive-bucket credential, which can write to production's WAL
+archive (Railway has no read-only variant). A fork whose deletion cannot be
+confirmed fails the run, and every run flags any `drill-*` service older
+than an hour.
+
+Every run sends a run report with each database's `rpo_seconds`,
+`rto_seconds`, tables and rows; a failure is a WARN (so it reaches the
+errors channel), goes to Sentry and exits 1. It refuses to run from any
+Railway environment but production.
+
+It needs a Railway token that may create and delete services:
+`DB_DRILL_RAILWAY_TOKEN`, a project token for the production environment
+by default (`DB_DRILL_RAILWAY_TOKEN_KIND=project`), or a workspace token
+(`workspace`) if a project token is refused.
 
 ## Recovery layers this repo serves
 
@@ -123,7 +160,7 @@ configured on the service itself:
 |---|---|---|---|
 | `db-backup` | `python -m db_ops.backup` | `17 9 * * *` | Never |
 | `db-poller` | `python -m db_ops.poller` | `*/5 * * * *` | Never |
-| `db-drill` | `python -m db_ops.drill` | set by MINI-64 | Never |
+| `db-drill` | `python -m db_ops.drill` | `43 9 2 * *` | Never |
 
 A cron run that fails is retried by the next scheduled run, not by a
 restart. These settings live in Railway rather than in this repository:
