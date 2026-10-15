@@ -26,14 +26,15 @@ URLS = {
 
 def _settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
-        "bucket": "mini-app-polis-db-backups-test",
-        "access_key_id": "AKIATEST",
-        "secret_access_key": "secret",
-        "region": "us-east-1",
-        "database_urls": dict(URLS),
-        "healthchecks_url": "https://hc-ping.com/test-check",
+        "db_backup_bucket": "mini-app-polis-db-backups-test",
+        "db_backup_aws_access_key_id": "AKIATEST",
+        "db_backup_aws_secret_access_key": "secret",
+        "aws_region": "us-east-1",
+        "db_backup_database_url_kaianolevine": URLS["kaianolevine"],
+        "db_backup_database_url_deejaytools": URLS["deejaytools"],
+        "healthchecks_url_db_backup": "https://hc-ping.com/test-check",
         "run_timeout_seconds": 60.0,
-        "connect_timeout_seconds": 5,
+        "db_connect_timeout_seconds": 5,
     }
     values.update(overrides)
     return Settings(**values)
@@ -84,7 +85,7 @@ def fake_dump(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Replace pg_dump with a file write; record which URLs were dumped."""
     dumped: list[str] = []
 
-    def _dump(url: str, target: Path, *, timeout: float, connect_timeout: int) -> None:
+    def _dump(url: str, target: Path, **kwargs: Any) -> None:
         if "fail" in url:
             raise BackupError("pg_dump exited 1: connection refused")
         target.write_bytes(b"PGDMP fake")
@@ -144,11 +145,9 @@ def test_one_failure_does_not_stop_the_other_database(
     s3 = FakeS3()
     monkeypatch.setattr(backup, "_s3_client", lambda settings: s3)
     report = FakeReport()
-    urls = {"kaianolevine": "postgresql://fail", "deejaytools": URLS["deejaytools"]}
-
     with pytest.raises(BackupError, match="kaianolevine"):
         backup.back_up(
-            _settings(database_urls=urls),
+            _settings(db_backup_database_url_kaianolevine="postgresql://fail"),
             report,  # type: ignore[arg-type]
             datetime(2026, 10, 15, tzinfo=UTC),
         )
@@ -194,21 +193,25 @@ def test_an_exhausted_budget_skips_the_rest(
 def test_missing_configuration_names_every_missing_variable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for name in [
-        backup.BUCKET_VAR,
-        backup.ACCESS_KEY_VAR,
-        backup.SECRET_KEY_VAR,
-        *backup.DATABASES.values(),
-    ]:
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv(backup.BUCKET_VAR, "bucket")
+    for name in Settings.model_fields:
+        monkeypatch.delenv(name.upper(), raising=False)
+    monkeypatch.setenv("DB_BACKUP_BUCKET", "bucket")
+    monkeypatch.setenv("DB_BACKUP_DATABASE_URL_DEEJAYTOOLS", "postgresql://x:pw@h/db")
 
     with pytest.raises(BackupError) as caught:
         Settings.from_env()
     message = str(caught.value)
-    assert backup.BUCKET_VAR not in message
-    assert backup.ACCESS_KEY_VAR in message
-    assert "DB_BACKUP_DATABASE_URL_DEEJAYTOOLS" in message
+    assert "DB_BACKUP_BUCKET" not in message
+    assert "DB_BACKUP_AWS_ACCESS_KEY_ID" in message
+    assert "DB_BACKUP_DATABASE_URL_KAIANOLEVINE" in message
+    assert "pw" not in message
+
+
+def test_secrets_never_appear_in_a_repr() -> None:
+    text = repr(_settings())
+    assert "AKIATEST" not in text
+    assert "railway.internal" not in text
+    assert "hc-ping.com" not in text
 
 
 def test_outside_production_the_run_is_skipped(
@@ -233,7 +236,13 @@ def test_dump_raises_without_echoing_the_connection_string(
 
     monkeypatch.setattr(backup.subprocess, "run", _run)
     with pytest.raises(BackupError) as caught:
-        backup.dump(secret_url, tmp_path / "x.dump", timeout=10, connect_timeout=1)
+        backup.dump(
+            secret_url,
+            tmp_path / "x.dump",
+            timeout=10,
+            connect_timeout=1,
+            lock_wait_timeout=1,
+        )
     assert "s3cret" not in str(caught.value)
     assert "--format=custom" in calls[0]
 
@@ -247,7 +256,11 @@ def test_a_missing_pg_dump_is_a_backup_error(
     monkeypatch.setattr(backup.subprocess, "run", _run)
     with pytest.raises(BackupError, match="not installed"):
         backup.dump(
-            "postgresql://x", tmp_path / "x.dump", timeout=10, connect_timeout=1
+            "postgresql://x",
+            tmp_path / "x.dump",
+            timeout=10,
+            connect_timeout=1,
+            lock_wait_timeout=1,
         )
 
 
@@ -260,7 +273,11 @@ def test_a_hung_dump_is_stopped(
     monkeypatch.setattr(backup.subprocess, "run", _run)
     with pytest.raises(BackupError, match="did not finish"):
         backup.dump(
-            "postgresql://x", tmp_path / "x.dump", timeout=10, connect_timeout=1
+            "postgresql://x",
+            tmp_path / "x.dump",
+            timeout=10,
+            connect_timeout=1,
+            lock_wait_timeout=1,
         )
 
 
