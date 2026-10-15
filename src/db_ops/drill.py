@@ -202,13 +202,17 @@ def mark(conn: Any, run_id: str, settings: Settings, *, sleep: Sleep) -> Mark:
     """Write the canary, then the fence, on an autocommit connection."""
     conn.execute(CANARY_TABLE)
     conn.execute(
-        "INSERT INTO ops.drill_canary (run_id, kind) VALUES (%s, 'canary')", (run_id,)
+        "INSERT INTO ops.drill_canary (run_id, kind) VALUES (%s, 'canary') "
+        "ON CONFLICT (run_id, kind) DO NOTHING",
+        (run_id,),
     )
     # Read after the canary has committed, so the canary is before this.
     canary_at = conn.execute("SELECT clock_timestamp()").fetchone()[0]
     sleep(settings.fence_gap_seconds)
     conn.execute(
-        "INSERT INTO ops.drill_canary (run_id, kind) VALUES (%s, 'fence')", (run_id,)
+        "INSERT INTO ops.drill_canary (run_id, kind) VALUES (%s, 'fence') "
+        "ON CONFLICT (run_id, kind) DO NOTHING",
+        (run_id,),
     )
     # The segment holding the fence's commit: the last byte written so far.
     fence_wal = conn.execute(

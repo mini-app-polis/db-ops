@@ -110,7 +110,9 @@ class Settings(BaseSettings):
 class Connection(Protocol):
     """The slice of a psycopg connection this module uses."""
 
-    def execute(self, query: Any) -> Any: ...
+    def execute(self, query: Any) -> Any:
+        """Run one query and return its cursor, as psycopg does."""
+        ...
 
 
 #: (metric name, unit, query returning one numeric value or NULL).
