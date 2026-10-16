@@ -1,3 +1,10 @@
+## [1.5.3](https://github.com/mini-app-polis/db-ops/compare/v1.5.2...v1.5.3) (2026-10-16)
+
+
+### Bug Fixes
+
+* **dump-drill:** document the scratch server's path properties ([42a532b](https://github.com/mini-app-polis/db-ops/commit/42a532bdac7065a629a8956128843c6cd95dd265))
+
 ## [1.5.2](https://github.com/mini-app-polis/db-ops/compare/v1.5.1...v1.5.2) (2026-10-16)
 
 
