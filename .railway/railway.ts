@@ -15,9 +15,9 @@
 //
 // Variables are references to the environment's shared variables, which
 // Doppler prd keeps current (`ctx.shared.NAME` is `${{shared.NAME}}`);
-// no value lives in this file. SENTRY_DSN_DB_OPS is kept as Railway has it.
+// no value lives in this file.
 
-import { defineRailway, github, preserve, project, service } from "railway/iac";
+import { defineRailway, github, project, service } from "railway/iac";
 
 export const partial = "db-ops";
 
@@ -53,6 +53,7 @@ export default defineRailway((ctx) => {
     "ENVIRONMENT",
     "KAIANO_API_BASE_URL",
     "LOGGING_LEVEL",
+    "SENTRY_DSN_COGS",
   ];
 
   // Every 5 minutes (MINI-58).
@@ -66,7 +67,6 @@ export default defineRailway((ctx) => {
         "DB_POLLER_DATABASE_URL_DEEJAYTOOLS",
         "DB_POLLER_DATABASE_URL_KAIANOLEVINE",
       ),
-      SENTRY_DSN_DB_OPS: preserve(),
     },
   });
 
@@ -83,7 +83,6 @@ export default defineRailway((ctx) => {
         "DB_BACKUP_DATABASE_URL_KAIANOLEVINE",
         "HEALTHCHECKS_URL_DB_BACKUP",
       ),
-      SENTRY_DSN_DB_OPS: preserve(),
     },
   });
 
@@ -104,7 +103,6 @@ export default defineRailway((ctx) => {
       ),
       // A project token cannot start a PITR restore (MINI-64).
       DB_DRILL_RAILWAY_TOKEN_KIND: "workspace",
-      SENTRY_DSN_DB_OPS: poller.env.SENTRY_DSN_DB_OPS,
     },
   });
 

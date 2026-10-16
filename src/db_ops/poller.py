@@ -18,9 +18,9 @@ Every five minutes (Railway's shortest cron interval), for each database in
 
 Published under ``MiniAppPolis/Postgres`` with a ``Database`` dimension, one
 ``PutMetricData`` per database. A database that cannot be reached publishes
-nothing for itself, which is what the ``DatabaseReachable`` alarm watches
-for; the other still reports. One metric that cannot be read is skipped and
-the rest are published.
+nothing for itself, which is what the ``postgres-<db>-unreachable`` alarm
+watches for; the other still reports. One metric that cannot be read is
+skipped and the rest are published.
 
 Every connection carries a connect timeout and a statement timeout, and the
 run has an overall budget: Railway skips a scheduled start while the previous
@@ -254,8 +254,8 @@ def poll(
             with connect(url, settings) as conn:
                 data = collect(conn, database, now, report)
         except (psycopg.Error, OSError) as exc:
-            # Publish nothing for it: the absence is what DatabaseReachable
-            # alarms on. A note rather than an issue, so a database that is
+            # Publish nothing for it: the absence is what the unreachable
+            # alarm fires on. A note rather than an issue, so a database that is
             # down does not also send a message every five minutes.
             LOG.warning(
                 "%s.unreachable database=%s err=%s",

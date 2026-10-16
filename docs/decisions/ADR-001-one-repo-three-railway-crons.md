@@ -1,7 +1,8 @@
 # ADR-001: One Repository, Three Railway Cron Services
 
 **Date:** 2026-10-15
-**Status:** Accepted
+**Status:** Accepted — amended 2026-10-16
+**Amendment (2026-10-16):** Sentry is not per-service. `SENTRY_DSN_DB_OPS`, named under Consequences, was never provisioned; all three services read the shared `SENTRY_DSN_COGS` like every other cog and are told apart by the `service` tag. The other per-service secret names stand.
 **Repo:** db-ops
 **Tasks:** MINI-58 through MINI-66 (Asana, MiniAppPolis board)
 
