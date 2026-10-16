@@ -1,3 +1,10 @@
+## [1.5.6](https://github.com/mini-app-polis/db-ops/compare/v1.5.5...v1.5.6) (2026-10-16)
+
+
+### Bug Fixes
+
+* **deps:** require miniapppolis-common-utils 6 (>=6.0.1) ([4931c13](https://github.com/mini-app-polis/db-ops/commit/4931c1376050201231b66c4d594de4a339b9b6f1))
+
 ## [1.5.5](https://github.com/mini-app-polis/db-ops/compare/v1.5.4...v1.5.5) (2026-10-16)
 
 
