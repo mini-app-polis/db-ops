@@ -27,6 +27,7 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
@@ -49,17 +50,32 @@ SCRATCH_USER = "drill"
 class ScratchPostgres:
     """A throwaway PostgreSQL server in a temporary directory.
 
-    Listens on a Unix socket only. Stopped, and its directory deleted, on
-    exit — whatever happened inside the ``with``.
+    Listens on a Unix socket only. The directory is created on entering the
+    ``with`` and, with the server, removed on leaving it — whatever happened
+    inside. Constructing one acquires nothing, so an instance that is never
+    entered leaves nothing behind.
     """
 
     def __init__(self, bin_dir: str, *, timeout: float = 120) -> None:
         self.bin = Path(bin_dir)
         self.timeout = timeout
-        self.root = Path(tempfile.mkdtemp(prefix="db-drill-"))
-        self.data = self.root / "data"
-        self.socket_dir = self.root / "sock"
+        self._root: Path | None = None
         self._started = False
+
+    @property
+    def root(self) -> Path:
+        """The temporary directory holding the cluster, its socket and dumps."""
+        if self._root is None:
+            raise RuntimeError("ScratchPostgres is used inside a with block")
+        return self._root
+
+    @property
+    def data(self) -> Path:
+        return self.root / "data"
+
+    @property
+    def socket_dir(self) -> Path:
+        return self.root / "sock"
 
     def conninfo(self, dbname: str) -> str:
         """How to reach one database on this server."""
@@ -81,6 +97,7 @@ class ScratchPostgres:
 
     def __enter__(self) -> ScratchPostgres:
         try:
+            self._root = Path(tempfile.mkdtemp(prefix="db-drill-"))
             self.socket_dir.mkdir()
             self._run(
                 "initdb",
@@ -106,9 +123,10 @@ class ScratchPostgres:
                 f"--options={options}",
             )
             self._started = True
-        except BaseException:
-            self._remove()
-            raise
+        finally:
+            # Anything short of a running server is undone before raising.
+            if not self._started:
+                self._remove()
         return self
 
     def __exit__(
@@ -126,7 +144,8 @@ class ScratchPostgres:
             except (DrillError, subprocess.TimeoutExpired) as exc:
                 LOG.warning("%s.scratch_stop_failed err=%s", SERVICE, exc)
             self._started = False
-        shutil.rmtree(self.root, ignore_errors=True)
+        if self._root is not None:
+            shutil.rmtree(self._root, ignore_errors=True)
 
     def restore(self, dbname: str, dump: Path, timeout: float) -> None:
         """Create ``dbname`` and restore ``dump`` into it."""
@@ -249,12 +268,12 @@ def drill_all(
     figures: dict[str, dict[str, float]] = {}
     failed: list[str] = []
 
-    try:
-        scratch = scratch_factory(settings.pg_bin_dir).__enter__()
-    except (DrillError, OSError, subprocess.TimeoutExpired) as exc:
-        report.issue("dump_drill_failed", "scratch server", detail=str(exc)[:300])
-        raise DrillError(f"the scratch Postgres did not start: {exc}") from None
-    try:
+    with ExitStack() as stack:
+        try:
+            scratch = stack.enter_context(scratch_factory(settings.pg_bin_dir))
+        except (DrillError, OSError, subprocess.TimeoutExpired) as exc:
+            report.issue("dump_drill_failed", "scratch server", detail=str(exc)[:300])
+            raise DrillError(f"the scratch Postgres did not start: {exc}") from None
         for database, (_, url) in settings.databases.items():
             try:
                 figures[database] = drill(
@@ -274,8 +293,6 @@ def drill_all(
                     "%s.dump_drill_failed database=%s err=%s", SERVICE, database, exc
                 )
                 failed.append(database)
-    finally:
-        scratch.__exit__(None, None, None)
 
     if failed:
         raise DrillError(f"dump drill failed for: {', '.join(failed)}")
