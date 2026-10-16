@@ -26,9 +26,9 @@ from db_ops._version import __version__
 
 LOG = log.get_logger()
 
-# Per-service secret name, not the bare fleet name: db-ops is hosted on
-# Railway, where Doppler syncs one shared config to every service.
-SENTRY_DSN_VAR = "SENTRY_DSN_DB_OPS"
+# The shared cogs Sentry project, under the same name every cog reads.
+# Events are told apart by the `service` tag _init_sentry sets.
+SENTRY_DSN_VAR = "SENTRY_DSN_COGS"
 
 Work = Callable[[str], dict[str, Any]]
 
