@@ -7,61 +7,17 @@ type: pipeline-cog
 # mini-app-polis/infra. db-ops is three Railway cron services with no queue
 # and no Lambda function — see docs/decisions/ADR-001-one-repo-three-railway-crons.md.
 #
-# The queue- and Lambda-shaped rules below are recorded as deferrals rather
-# than a new repo type: one repository is not enough to justify a type
-# (ADR-002). Once wiki-curator-cog moves to Lambda, db-ops is the only
-# Railway-hosted cog. If a second repository of this shape appears, the type
-# is what should change, and these come out.
+# The queue- and Lambda-shaped rules below are exemptions, not deferrals:
+# they have no subject in a Railway cron repository, so there is nothing to
+# get round to. They are recorded per repo rather than as a new repo type,
+# because one repository is not enough to justify a type (ADR-002). Once
+# wiki-curator-cog moves to Lambda, db-ops is the only Railway-hosted cog. If
+# a second repository of this shape appears, the type is what should change,
+# and these come out.
+#
+# Deferrals are for rules that do apply and are not met yet.
 
 deferrals:
-  - rule: PIPE-015
-    reason: >
-      Requires a pipeline cog's work to arrive on a queue the API enqueues
-      onto. Each db-ops service is started by its own Railway cron schedule;
-      a run takes no arguments and works on both databases, so there is no
-      per-item message to enqueue. ADR-001.
-    until: null
-
-  - rule: PIPE-016
-    reason: >
-      Requires a queue, a Lambda function and an event source mapping
-      declared in mini-app-polis/infra. db-ops runs as Railway cron services
-      so both databases are reached over private networking; there is no
-      function or queue to declare. ADR-001.
-    until: null
-
-  - rule: PIPE-017
-    reason: >
-      Per-record failure reporting, a dead-letter queue and a visibility
-      timeout. There are no records — one wake is one run. A failed run
-      exits non-zero, reaches Sentry and the next scheduled run is the
-      retry; each service adds its own liveness signal in its task.
-    until: null
-
-  - rule: PIPE-018
-    reason: >
-      A concurrency ceiling declared in infra/. Railway does not start a
-      cron service again while its previous run is still active, which is
-      the ceiling; there is no reservation to declare.
-    until: null
-
-  - rule: PIPE-020
-    reason: >
-      Looks for Lambda's get_remaining_time_in_millis. There is no Lambda
-      clock on Railway; each service sets connect, statement and overall
-      deadlines on its own runs (MINI-58 onward), since a hung run blocks
-      every later scheduled start.
-    until: null
-
-  - rule: CD-010
-    reason: >
-      Makes a pipeline cog's liveness layer a dead-letter-queue alarm. There
-      is no queue. Liveness comes per service instead: the db-poller's
-      DatabaseReachable alarm doubles as its dead-man's switch (MINI-61),
-      db-backup pings Healthchecks.io (MINI-63), and db-drill sends a run
-      report on every monthly run, pass or fail (MINI-64).
-    until: null
-
   - rule: CD-009
     reason: >
       _entry.py sets the httpx and httpcore loggers to WARNING with the
@@ -74,15 +30,56 @@ deferrals:
       Healthchecks ping URLs too.
     until: null
 
+exemptions:
+  - rule: PIPE-015
+    reason: >
+      Requires a pipeline cog's work to arrive on a queue the API enqueues
+      onto. Each db-ops service is started by its own Railway cron schedule;
+      a run takes no arguments and works on both databases, so there is no
+      per-item message to enqueue. ADR-001.
+
+  - rule: PIPE-016
+    reason: >
+      Requires a queue, a Lambda function and an event source mapping
+      declared in mini-app-polis/infra. db-ops runs as Railway cron services
+      so both databases are reached over private networking; there is no
+      function or queue to declare. ADR-001.
+
+  - rule: PIPE-017
+    reason: >
+      Per-record failure reporting, a dead-letter queue and a visibility
+      timeout. There are no records — one wake is one run. A failed run
+      exits non-zero, reaches Sentry and the next scheduled run is the
+      retry; each service adds its own liveness signal in its task.
+
+  - rule: PIPE-018
+    reason: >
+      A concurrency ceiling declared in infra/. Railway does not start a
+      cron service again while its previous run is still active, which is
+      the ceiling; there is no reservation to declare.
+
+  - rule: PIPE-020
+    reason: >
+      Looks for Lambda's get_remaining_time_in_millis. There is no Lambda
+      clock on Railway; each service sets connect, statement and overall
+      deadlines on its own runs (MINI-58 onward), since a hung run blocks
+      every later scheduled start.
+
+  - rule: CD-010
+    reason: >
+      Makes a pipeline cog's liveness layer a dead-letter-queue alarm. There
+      is no queue. Liveness comes per service instead: the db-poller's
+      DatabaseReachable alarm doubles as its dead-man's switch (MINI-61),
+      db-backup pings Healthchecks.io (MINI-63), and db-drill sends a run
+      report on every monthly run, pass or fail (MINI-64).
+
   - rule: CD-024
     reason: >
       Reads memory_size and timeout from the cog's Lambda module block.
       There is no Lambda function. Each Railway service's settings and the
       run budget each service sets on itself (RUN_TIMEOUT_SECONDS) are its
       ceiling.
-    until: null
 
-exemptions:
   - rule: PY-013
     reason: >
       There is no stream of arriving input to see twice. Each run reads the
