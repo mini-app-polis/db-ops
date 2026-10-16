@@ -255,7 +255,8 @@ as a comment and pins it; merging the pull request runs
 changed after the plan (a dashboard edit) or `.railway/` changed before the
 merge, the apply fails and the pull request needs a fresh plan — what was
 reviewed is what lands. Railway itself does not read `.railway/` when it
-deploys.
+deploys. Both workflows call the fleet's shared ones in
+`mini-app-polis/.github`, which pin the action and CLI versions.
 
 Read the plan comment before merging: a service missing from the file is
 deleted. The apply refuses to run on the 2nd between 09:00 and 10:59 UTC,

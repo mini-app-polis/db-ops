@@ -3,7 +3,8 @@
 # if the environment changed since (a dashboard edit) or .railway/ is not
 # the planned tree, it fails and the pull request needs a fresh plan. A
 # push to main that did not come through a pull request has no plan and
-# fails by design. MINI-67.
+# fails by design. The steps live in the shared workflow in
+# mini-app-polis/.github (MINI-70). MINI-67.
 name: Railway apply
 
 on:
@@ -18,28 +19,14 @@ permissions:
   actions: read
   pull-requests: read
 
-concurrency:
-  group: railway-config-apply
-  cancel-in-progress: false
-
 jobs:
   apply:
-    runs-on: ubuntu-latest
-    steps:
+    uses: mini-app-polis/.github/.github/workflows/railway-apply.yml@v3
+    with:
       # Applying a change to db-drill redeploys it, which stops a drill run
       # before it can delete its forks (README). The drill runs at 09:43 UTC
-      # on the 2nd and takes about fifteen minutes; re-run this job after.
-      - name: Not during the monthly drill
-        run: |
-          if [ "$(date -u +%d)" = "02" ] && [ "$(date -u +%H)" -ge 9 ] && [ "$(date -u +%H)" -le 10 ]; then
-            echo "::error::db-drill may be running (09:43 UTC on the 2nd). Re-run this job after 11:00 UTC."
-            exit 1
-          fi
-
-      - uses: actions/checkout@v7
-
-      - uses: railwayapp/config@v1.2.0
-        with:
-          command: apply
-          railway-token: ${{ secrets.RAILWAY_TOKEN }}
-          cli-version: "5.68.0"
+      # on the 2nd and takes about fifteen minutes.
+      blocked-window: "02 09-10"
+      blocked-window-reason: "db-drill may be running (09:43 UTC on the 2nd)"
+    secrets:
+      railway-token: ${{ secrets.RAILWAY_TOKEN }}
