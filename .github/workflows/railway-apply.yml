@@ -1,26 +1,26 @@
-# Applies the plan railway-plan.yml pinned on the pull request, when that
-# pull request lands on main. It applies exactly the reviewed change set:
-# if the environment changed since (a dashboard edit) or .railway/ is not
-# the planned tree, it fails and the pull request needs a fresh plan. A
-# push to main that did not come through a pull request has no plan and
-# fails by design. The steps live in the shared workflow in
-# mini-app-polis/.github (MINI-70). MINI-67.
+# Plans afresh and applies .railway/railway.ts to production on every push
+# to main that changes it, or by hand (Actions → Railway apply → Run
+# workflow). Removing a service or a variable is destructive and applies
+# only if the pull request the commit came from is labelled allow-destroy.
+# The steps live in the shared workflow in mini-app-polis/.github,
+# modelled on mini-app-polis/infra's terraform.yml. MINI-67.
 name: Railway apply
 
 on:
   push:
     branches: [main]
-    paths: [".railway/**"]
+    paths: [".railway/**", ".github/workflows/railway-apply.yml"]
+  workflow_dispatch:
 
-# pull-requests: read lets the action find the merged pull request, and
-# actions: read lets it download that pull request's plan.
+# pull-requests: read finds the pull request a commit came from, for its
+# allow-destroy label.
 permissions:
   contents: read
-  actions: read
   pull-requests: read
 
 jobs:
   apply:
+    if: github.ref_name == 'main'
     uses: mini-app-polis/.github/.github/workflows/railway-apply.yml@v3
     with:
       # Applying a change to db-drill redeploys it, which stops a drill run

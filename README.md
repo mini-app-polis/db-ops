@@ -248,18 +248,18 @@ A cron run that fails is retried by the next scheduled run, not by a
 restart. `tests/integration/test_start_commands.py` proves each start
 command runs.
 
-`.railway/` is applied by CI and never from a workstation. A pull request
-into `main` that changes it runs `railway-plan.yml`, which posts the plan
-as a comment and pins it; merging the pull request runs
-`railway-apply.yml`, which applies exactly that plan. If the environment
-changed after the plan (a dashboard edit) or `.railway/` changed before the
-merge, the apply fails and the pull request needs a fresh plan — what was
-reviewed is what lands. Railway itself does not read `.railway/` when it
-deploys. Both workflows call the fleet's shared ones in
-`mini-app-polis/.github`, which pin the action and CLI versions.
+`.railway/` is applied by CI and never from a workstation, as
+mini-app-polis/infra applies Terraform. A pull request into `main` that
+changes it runs `railway-plan.yml`, which writes the plan to the job
+summary; merging the pull request runs `railway-apply.yml`, which plans
+again and applies. Removing a service or a variable is destructive and is
+refused unless the pull request is labelled `allow-destroy`. Actions →
+Railway apply → Run workflow re-applies `main` by hand. Railway itself does
+not read `.railway/` when it deploys. Both workflows call the fleet's shared
+ones in `mini-app-polis/.github`, which pin the CLI version.
 
-Read the plan comment before merging: a service missing from the file is
-deleted. The apply refuses to run on the 2nd between 09:00 and 10:59 UTC,
+Read the plan before merging: a service missing from the file is
+deleted, if the pull request is labelled `allow-destroy`. The apply refuses to run on the 2nd between 09:00 and 10:59 UTC,
 because changing db-drill redeploys it, and a redeploy stops a running
 drill before its forks are torn down; re-run the job afterwards.
 
