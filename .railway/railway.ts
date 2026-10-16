@@ -1,8 +1,9 @@
 // The three db-ops Railway services, declared here and applied by CI: a pull
-// request into main that changes .railway/ gets a plan comment
-// (.github/workflows/railway-plan.yml), and merging it applies exactly that
-// plan (railway-apply.yml). Nothing is applied from a workstation. Railway
-// itself does not read this file when it deploys. MINI-67.
+// request into main that changes .railway/ is planned
+// (.github/workflows/railway-plan.yml), and merging it plans again and
+// applies (railway-apply.yml), refusing to remove anything unless the pull
+// request is labelled allow-destroy. Nothing is applied from a workstation.
+// Railway itself does not read this file when it deploys. MINI-67.
 //
 // A named partial: the ecosystem project holds services from several
 // repositories, so this file manages only what it declares — db-poller,
