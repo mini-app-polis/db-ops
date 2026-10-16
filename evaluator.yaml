@@ -77,12 +77,3 @@ exemptions:
       restores into a fork service it creates and deletes within the run,
       keyed by its own run id.
       Nothing is ingested, so nothing can be ingested twice.
-
-  - rule: PY-012
-    reason: >
-      FAILED_ prefixing makes a bad input file visible where it lies. db-ops
-      has no input files: the only files it handles are dumps it writes or
-      downloads itself into a temporary directory that is removed when the
-      run ends, pass or fail. A failure is recorded on the run report, sent
-      to Sentry and turned into a non-zero exit; a renamed file in a deleted
-      directory would be seen by nobody.
