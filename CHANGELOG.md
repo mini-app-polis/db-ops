@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/mini-app-polis/db-ops/compare/v1.5.0...v1.5.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **ci:** exclude .railway from linguist so CodeQL stops auto-enabling TypeScript ([caee6b4](https://github.com/mini-app-polis/db-ops/commit/caee6b4f25e5b9d162f1ded88dc277808b68902e))
+
 # [1.5.0](https://github.com/mini-app-polis/db-ops/compare/v1.4.1...v1.5.0) (2026-10-15)
 
 
