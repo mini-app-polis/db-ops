@@ -32,6 +32,15 @@ daily/<database>/<UTC timestamp>.dump      every run    (kept 30 days)
 monthly/<database>/<UTC timestamp>.dump    on the 1st   (kept 90 days)
 ```
 
+The bucket (mini-app-polis/infra `database_backups.tf`) is versioned, and
+every object version sits under a 7-day governance-mode Object Lock, so not
+even the writer's key can delete or overwrite a fresh dump. db-backup's key
+(`db-backup-writer`) can only `PutObject` under `daily/` and `monthly/`: a
+leaked key can add dumps but cannot read, list or delete one. db-drill reads
+with a separate key (`db-backup-reader`: `GetObject` and `ListBucket` only).
+Governance rather than compliance mode, so that a deejaytools user's erasure
+request can still reach the backups.
+
 Both databases are attempted whatever happens to the other. Any failure
 ends the run with exit 1, a Sentry event, a Healthchecks.io `/fail` ping and
 a WARN run report; a clean run sends a run report naming what it wrote.
@@ -63,9 +72,23 @@ them in one `PutMetricData` under `MiniAppPolis/Postgres`, dimension
 | `ArchiveFailedCount`, `ArchiveAge` | Count, Seconds | `pg_stat_archiver` (PITR's WAL archive) |
 | `WalDirSize` | Bytes | `pg_ls_waldir()` |
 
-A database it cannot reach publishes nothing for itself, which is what the
-`DatabaseReachable` alarm (MINI-61) watches for; a failed publish fails the
-run. Production only, through `Effect.CLOUDWATCH_METRICS`.
+A database it cannot reach publishes nothing for itself, which is what its
+`unreachable` alarm watches for; a failed publish fails the run. Production
+only, through `Effect.CLOUDWATCH_METRICS`.
+
+The alarms (MINI-61, mini-app-polis/infra `database_metrics.tf`), one set per
+database, email through the `mini-app-polis-data-alerts` topic on alarm and
+on recovery. The `mini-app-polis-data` dashboard shows the same metrics.
+
+| Alarm | Fires when |
+|---|---|
+| `postgres-<db>-unreachable` | No `Connections` sample for 3 periods in a row (15 min). Missing data counts as breaching, so this is the alarm for a database, or the poller, that has gone quiet |
+| `postgres-<db>-connections-high` | `ConnectionUtilization` above 80% for 2 periods |
+| `postgres-<db>-archive-failing` | `ArchiveFailedCount` rises in 2 periods in a row: WAL is not reaching the PITR archive |
+| `postgres-<db>-wal-dir-filling` | `WalDirSize` above 1.5 GiB for 3 periods: the archive is falling behind, short of pgBackRest's ~2.2 GiB cap, past which it drops WAL and PITR has a hole |
+
+Only `unreachable` treats missing data as breaching; the rest leave a
+silent database to it.
 
 ## db-drill
 
@@ -120,10 +143,38 @@ Every run sends a run report with each database's `rpo_seconds`,
 errors channel), goes to Sentry and exits 1. It refuses to run from any
 Railway environment but production.
 
-It needs a Railway token that may create and delete services:
-`DB_DRILL_RAILWAY_TOKEN`, a project token for the production environment
-by default (`DB_DRILL_RAILWAY_TOKEN_KIND=project`), or a workspace token
-(`workspace`) if a project token is refused.
+It needs a Railway token that may restore, read and delete services:
+`DB_DRILL_RAILWAY_TOKEN`. In production it is a **workspace** token
+(`DB_DRILL_RAILWAY_TOKEN_KIND=workspace`, set in `.railway/railway.ts`),
+because Railway refuses `volumeInstancePITRRestore` with a project token
+(found building MINI-64). That is a broad credential: it has its own Doppler
+entry and only db-drill reads it. The code's default is still `project`, for
+the day Railway allows it.
+
+The cadence, and what would change it, is
+[ADR-003](docs/decisions/ADR-003-monthly-restore-drill.md).
+
+### Running a drill by hand
+
+Trigger an off-schedule run of the production service; it runs exactly what
+the schedule runs, both layers for both databases, and reports the same way:
+
+```bash
+railway cron run  --service db-drill --environment production
+railway cron list --service db-drill --environment production   # status, then a ready-made logs command
+```
+
+The Railway dashboard's Cron Runs tab on db-drill does the same. A run took
+7–10 minutes on 2026-10-15. Running it from a workstation does not drill:
+outside production it logs that it would have and exits, and even with
+`DB_DRILL_ENABLED=true` it refuses any Railway environment but production.
+
+While a hand-run drill is going, **nothing protects it from a deploy**. The
+CI apply guard covers only the scheduled window (the 2nd, 09:00–10:59 UTC),
+and `main` deploys db-drill on push, so do not merge into `main` (a
+commons-update bump included) until the run has finished. If one is cut
+short anyway, clean up as above: each leftover fork's volume first, then
+the service.
 
 ## Recovery record
 
@@ -188,11 +239,71 @@ reaches the live database at once and the backups when they expire, and
 nothing restored from a backup older than an erasure may be put back into
 service without re-applying it.
 
----|---|---|---|
-| Point-in-time recovery | Railway (pgBackRest → Railway bucket) | ~1 min, ~4-week window | Railway; drilled by `db-drill` |
-| Nightly logical dump | S3, off Railway | 24 h | `db-backup`; drilled by `db-drill` |
+## Recovering a database
 
-The Railway workspace is on the Hobby plan, so there are no volume backups.
+**Never rehearsed end to end.** The drill proves each layer restores and
+measures how fast; it stops before cutover. These steps are the starting
+procedure, built from the drill and Railway's documentation. Correct them
+after the first rehearsal or real use.
+
+### Which layer
+
+- **Something went wrong inside a database** (a bad migration, deleted rows,
+  a runaway script) and Railway is fine: point-in-time recovery.
+- **Only some rows are needed back:** restore a PITR fork, copy the rows out,
+  delete the fork. Production stays where it is.
+- **Railway has lost the database, its PITR bucket or the project:** the
+  nightly dump. Anything written since the newest dump (up to a day) is gone.
+
+### From point-in-time recovery
+
+1. If the damage is still happening, stop the API service that writes to the
+   database first.
+2. Restore to a moment just before the damage, into a new service. Either
+   the database's Backups tab → **Restore to this moment**, or:
+   ```bash
+   railway postgres pitr restore --service Postgres-deejaytools \
+     --at 2026-10-16T14:05:00Z --new-service-name deejaytools-restored --yes
+   ```
+   The source keeps running untouched. Expect about 2–3 minutes (the drill's
+   RTO).
+3. Check the fork before trusting it: `schema_migrations` matches, every table
+   is there, and the rows you lost are back.
+4. Cut over by pointing every consumer at the fork. A physical restore brings
+   the roles and their passwords with it, so only the host changes:
+
+   | Database | Consumer | Setting |
+   |---|---|---|
+   | `kaianolevine` | api-kaianolevine-com | `DATABASE_URL` (a reference to the `Postgres` service, held on the service, not in Doppler), and `DATABASE_URL_MIGRATIONS` where set |
+   | `kaianolevine` | db-ops | `DB_POLLER_` / `DB_BACKUP_` / `DB_DRILL_DATABASE_URL_KAIANOLEVINE` (Doppler `prd`), and `DB_DRILL_SOURCE_SERVICE_KAIANOLEVINE` if the service name changed |
+   | `deejaytools` | api-deejaytools | `DEEJAYTOOLS_DATABASE_URL` (a reference to `Postgres-deejaytools`), and `DEEJAYTOOLS_DATABASE_URL_MIGRATIONS` where set |
+   | `deejaytools` | db-ops | the same three `…_DEEJAYTOOLS` URLs, and `DB_DRILL_SOURCE_SERVICE_DEEJAYTOOLS` |
+
+5. **The fork is not archiving.** Enable PITR on it (Backups tab; it gets its
+   own bucket), or the database has no point-in-time recovery from here on.
+6. The fork's recovery variables (`WAL_RECOVER_FROM_*`) still hold the old
+   source's archive credential, which can write to the old archive. Keep the
+   old service and its bucket until the fork is verified and archiving, then
+   decide whether to remove those variables. That has not been tested.
+
+### From the nightly dump
+
+1. Find and download the dump, with an AWS profile that can read the bucket
+   (the admin profile, or the `db-backup-reader` key):
+   ```bash
+   aws s3 ls "s3://$DB_BACKUP_BUCKET/daily/deejaytools/"
+   aws s3 cp "s3://$DB_BACKUP_BUCKET/daily/deejaytools/<stamp>.dump" .
+   ```
+   Use `monthly/` for anything older than 30 days.
+2. Create a new PostgreSQL 18 database. `kaianolevine` needs `pgvector`
+   available on the server, because its schema creates the `vector` extension.
+3. Restore: `pg_restore --no-owner --no-acl --exit-on-error -d "<new url>"
+   <file>.dump`.
+4. **Recreate the roles and grants.** The restore above carries no roles and
+   no privileges: the runtime role (without DDL, per OPS-002), the migrations
+   role, and `metrics`, `backup` and `drill` for db-ops. This step has never
+   been written down; it is the gap a real dump recovery would hit first.
+5. Cut over as in step 4 above, then turn on PITR for the new database.
 
 ---
 
