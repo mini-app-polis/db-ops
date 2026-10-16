@@ -71,10 +71,12 @@ class ScratchPostgres:
 
     @property
     def data(self) -> Path:
+        """The cluster's data directory, which ``initdb`` creates."""
         return self.root / "data"
 
     @property
     def socket_dir(self) -> Path:
+        """Where the server's Unix socket lives — its only listener."""
         return self.root / "sock"
 
     def conninfo(self, dbname: str) -> str:

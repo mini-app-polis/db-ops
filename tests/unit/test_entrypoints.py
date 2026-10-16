@@ -82,9 +82,20 @@ def test_sentry_initialises_only_when_its_own_dsn_is_set(
     assert tags == [("service", "db-test")]
 
 
-def test_request_urls_are_kept_out_of_the_logs() -> None:
+def test_a_healthchecks_ping_url_is_redacted_in_the_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # The ping URL is the credential. The shared logger redacts it on the
+    # httpx logger (miniapppolis-common-utils 5.25.4) — this is the line
+    # httpx writes for every request.
     import logging
 
     assert _entry.run("db-test", lambda run_id: {}) == 0
-    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
-    assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING
+    with caplog.at_level(logging.INFO, logger="httpx"):
+        logging.getLogger("httpx").info(
+            'HTTP Request: GET %s "%s"',
+            "https://hc-ping.com/0f3e6b1c-1234-4cde-9abc-0123456789ab/fail",
+            "HTTP/1.1 200 OK",
+        )
+    assert "0f3e6b1c" not in caplog.text
+    assert "hc-ping.com/<redacted>/fail" in caplog.text
