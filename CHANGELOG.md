@@ -1,3 +1,10 @@
+## [1.5.2](https://github.com/mini-app-polis/db-ops/compare/v1.5.1...v1.5.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* **dump-drill:** create the scratch directory on entry and manage it with a context manager ([2c4dafe](https://github.com/mini-app-polis/db-ops/commit/2c4dafe30916512dc3475bd59d9c023b94c2e358))
+
 ## [1.5.1](https://github.com/mini-app-polis/db-ops/compare/v1.5.0...v1.5.1) (2026-10-16)
 
 
