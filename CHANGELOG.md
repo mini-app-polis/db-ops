@@ -1,3 +1,10 @@
+## [1.5.5](https://github.com/mini-app-polis/db-ops/compare/v1.5.4...v1.5.5) (2026-10-16)
+
+
+### Bug Fixes
+
+* report errors to SENTRY_DSN_COGS ([be864fa](https://github.com/mini-app-polis/db-ops/commit/be864fae461c424e98cbd41c42a6e5ca94882f62))
+
 ## [1.5.4](https://github.com/mini-app-polis/db-ops/compare/v1.5.3...v1.5.4) (2026-10-16)
 
 
