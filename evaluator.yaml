@@ -17,19 +17,6 @@ type: pipeline-cog
 #
 # Deferrals are for rules that do apply and are not met yet.
 
-deferrals:
-  - rule: CD-009
-    reason: >
-      _entry.py sets the httpx and httpcore loggers to WARNING with the
-      standard logging module; every log line still goes through the shared
-      logger. It is there because those loggers print each request URL at
-      INFO, and a Healthchecks.io ping URL is itself the credential that
-      marks db-backup's check up or down. common-python-utils holds them at
-      INFO and redacts only the URL secrets it knows (Discord webhooks).
-      Remove this, and the override, once the shared logger redacts
-      Healthchecks ping URLs too.
-    until: null
-
 exemptions:
   - rule: PIPE-015
     reason: >
