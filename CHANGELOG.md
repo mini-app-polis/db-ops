@@ -1,3 +1,10 @@
+## [1.5.8](https://github.com/mini-app-polis/db-ops/compare/v1.5.7...v1.5.8) (2026-10-17)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.2.0 ([e30511d](https://github.com/mini-app-polis/db-ops/commit/e30511d69cb1fbad57ad5dd5d108e2f68a37efa4))
+
 ## [1.5.7](https://github.com/mini-app-polis/db-ops/compare/v1.5.6...v1.5.7) (2026-10-16)
 
 
