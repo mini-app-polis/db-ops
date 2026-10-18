@@ -21,6 +21,7 @@ from typing import Any
 import sentry_sdk
 from mini_app_polis import logger as log
 from mini_app_polis.environment import current_environment
+from mini_app_polis.sentry import init_sentry
 
 from db_ops._version import __version__
 
@@ -34,16 +35,13 @@ Work = Callable[[str], dict[str, Any]]
 
 
 def _init_sentry(service: str) -> None:
-    dsn = os.getenv(SENTRY_DSN_VAR, "").strip()
-    if not dsn:
-        return
-    sentry_sdk.init(
-        dsn=dsn,
-        traces_sample_rate=0.0,
-        environment=current_environment().value,
+    # An empty DSN in production logs an ERROR rather than skipping silently
+    # (CD-038) — the gap that left these crons without Sentry unnoticed.
+    init_sentry(
+        service,
+        dsn_var=SENTRY_DSN_VAR,
         release=os.getenv("RAILWAY_GIT_COMMIT_SHA", "unknown"),
     )
-    sentry_sdk.get_global_scope().set_tag("service", service)
 
 
 def run(service: str, work: Work) -> int:
