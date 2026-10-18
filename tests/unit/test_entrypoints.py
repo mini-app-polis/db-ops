@@ -79,6 +79,7 @@ def test_sentry_initialises_only_when_its_own_dsn_is_set(
     monkeypatch.setenv(_entry.SENTRY_DSN_VAR, "https://key@sentry.example/1")
     _entry._init_sentry("db-test")
     assert calls[0]["dsn"] == "https://key@sentry.example/1"
+    assert calls[0]["release"] == "unknown"
     assert tags == [("service", "db-test")]
 
 
