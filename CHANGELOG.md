@@ -1,3 +1,11 @@
+## [1.5.15](https://github.com/mini-app-polis/db-ops/compare/v1.5.14...v1.5.15) (2026-10-20)
+
+
+### Bug Fixes
+
+* **deps:** bump certifi to 2026.10.19 for GHSA-6q48-6c7w-9gw2 ([92bbeed](https://github.com/mini-app-polis/db-ops/commit/92bbeed0bd723ad70e575d74a7792b70352822f1))
+* **drill:** tear down a fork whose restore request errored ([09d1825](https://github.com/mini-app-polis/db-ops/commit/09d18250f04636bbd421de339d07af22957ef246))
+
 ## [1.5.14](https://github.com/mini-app-polis/db-ops/compare/v1.5.13...v1.5.14) (2026-10-19)
 
 
