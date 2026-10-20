@@ -526,8 +526,13 @@ def drill(
     started = time.monotonic()
     restore_deadline = min(deadline, started + settings.restore_timeout_seconds)
     try:
-        workflow_id = api.pitr_restore(volumes[0].instance_id, moment.target, name)
+        # Set before the call, not after it: a request that errors (a
+        # timeout, a 5xx) may still have reached Railway and created the
+        # fork. tear_down waits for a fork that has not appeared yet and
+        # returns False if none ever does, so a rejected request costs only
+        # that wait.
         requested = True
+        workflow_id = api.pitr_restore(volumes[0].instance_id, moment.target, name)
         report.created("drill fork", name)
         host = wait_for_fork(
             api, name, workflow_id, restore_deadline, settings, sleep=sleep
