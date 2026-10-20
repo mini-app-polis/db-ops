@@ -4,7 +4,6 @@
 **Status:** Accepted — amended 2026-10-16
 **Amendment (2026-10-16):** Sentry is not per-service. `SENTRY_DSN_DB_OPS`, named under Consequences, was never provisioned; all three services read the shared `SENTRY_DSN_COGS` like every other cog and are told apart by the `service` tag. The other per-service secret names stand.
 **Repo:** db-ops
-**Tasks:** MINI-58 through MINI-66 (Asana, MiniAppPolis board)
 
 ---
 
@@ -66,10 +65,9 @@ metrics; each service gates its work on the environment.
   The original plan was one config file per service under `railway/`, but
   Railway refuses a per-service config path for new services
   (config-as-code is deprecated, and stops being read on 2026-12-01;
-  amended 2026-10-15, MINI-63). The file is a named partial, `db-ops`,
+  amended 2026-10-15). The file is a named partial, `db-ops`,
   because the ecosystem project holds services from other repositories:
-  it owns these three and cannot touch the rest (amended 2026-10-15,
-  MINI-67).
+  it owns these three and cannot touch the rest (amended 2026-10-15).
 - Secrets use per-service names (`SENTRY_DSN_DB_OPS`, and the database and
   AWS names each task adds) because Doppler syncs one shared config to every
   Railway service.

@@ -10,9 +10,9 @@ Every five minutes (Railway's shortest cron interval), for each database in
 * ``OldestTransactionAge``
 * ``StatementCalls`` and ``StatementExecTime`` — cumulative totals from
   ``pg_stat_statements``. A cron run keeps no state, so the mean query time is
-  derived in CloudWatch with metric math, ``DIFF(time) / DIFF(calls)`` (MINI-61).
+  derived in CloudWatch with metric math, ``DIFF(time) / DIFF(calls)``.
 * ``ArchiveFailedCount`` (cumulative), ``ArchiveAge`` and ``WalDirSize`` — the
-  health of point-in-time recovery's WAL archive (MINI-59). A stalled archive
+  health of point-in-time recovery's WAL archive. A stalled archive
   spools WAL on the database's own volume; without these, PITR coverage is
   lost silently and found out at restore time.
 

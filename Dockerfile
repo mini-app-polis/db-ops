@@ -8,7 +8,7 @@
 # has no way to add.
 #
 # db-drill also restores the nightly dumps into a throwaway PostgreSQL 18
-# inside its own container (MINI-65), so the server is here too, with
+# inside its own container, so the server is here too, with
 # pgvector — api-kaianolevine-com's schema uses it — and without the
 # cluster Debian would otherwise create at install.
 #

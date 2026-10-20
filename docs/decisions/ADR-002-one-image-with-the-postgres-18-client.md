@@ -3,7 +3,6 @@
 **Date:** 2026-10-15
 **Status:** Accepted
 **Repo:** db-ops
-**Task:** MINI-63
 
 ---
 
@@ -42,7 +41,7 @@ repository change cannot silently hand the services an older client.
 - When the databases move to a new major, `PG_MAJOR` moves with them, in
   the same change.
 
-## Amendment — 2026-10-15 (MINI-65): the server too
+## Amendment — 2026-10-15: the server too
 
 db-drill restores the nightly S3 dumps into a throwaway PostgreSQL inside
 its own container, never into a Railway database. So the image also carries

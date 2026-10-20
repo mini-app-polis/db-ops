@@ -3,14 +3,13 @@
 **Date:** 2026-10-16
 **Status:** Accepted
 **Repo:** db-ops
-**Tasks:** MINI-64, MINI-65
 
 ---
 
 ## Context
 
 db-drill restores both recovery layers of both production databases and
-measures the result (README, db-drill). MINI-64 set it to run monthly
+measures the result (README, db-drill). It was first set to run monthly
 without recording why, and the planning that preceded it had proposed a
 quarterly drill by hand. Once the drill was automated, the cadence became a
 choice about what it should catch and what each run costs.
