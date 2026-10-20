@@ -1,7 +1,7 @@
 """db-drill — prove point-in-time recovery works, monthly, on both databases.
 
 A backup nobody has restored is a hope. Once a month, for each database in
-:attr:`Settings.databases`, one at a time (MINI-64):
+:attr:`Settings.databases`, one at a time:
 
 1. **Mark a moment.** As the ``drill`` role, write a *canary* row to
    ``ops.drill_canary``, read the database's clock, wait a couple of
@@ -36,7 +36,7 @@ in, and that must be production. Anywhere else the run logs that it would
 have drilled and exits 0, unless ``DB_DRILL_ENABLED=true`` asks for a
 deliberate test — which still refuses a non-production Railway environment.
 
-Then the second layer, in :mod:`db_ops.dump_drill` (MINI-65): the latest
+Then the second layer, in :mod:`db_ops.dump_drill`: the latest
 nightly S3 dump of each database is restored into a throwaway Postgres
 inside this container and checked the same way, minus the canary.
 
@@ -135,7 +135,7 @@ class Settings(BaseSettings):
     #: takes about fifteen minutes.
     stale_fork_seconds: float = 1800
 
-    # -- the S3 dump drill (MINI-65) --
+    # -- the S3 dump drill --
     #: The off-platform backup bucket, and the read-only key for it
     #: (mini-app-polis/infra database_backups.tf, db-backup-reader).
     db_backup_bucket: str
@@ -526,8 +526,13 @@ def drill(
     started = time.monotonic()
     restore_deadline = min(deadline, started + settings.restore_timeout_seconds)
     try:
-        workflow_id = api.pitr_restore(volumes[0].instance_id, moment.target, name)
+        # Set before the call, not after it: a request that errors (a
+        # timeout, a 5xx) may still have reached Railway and created the
+        # fork. tear_down waits for a fork that has not appeared yet and
+        # returns False if none ever does, so a rejected request costs only
+        # that wait.
         requested = True
+        workflow_id = api.pitr_restore(volumes[0].instance_id, moment.target, name)
         report.created("drill fork", name)
         host = wait_for_fork(
             api, name, workflow_id, restore_deadline, settings, sleep=sleep

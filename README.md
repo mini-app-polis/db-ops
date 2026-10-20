@@ -8,14 +8,13 @@ Postgres operations for the ecosystem's two production databases on Railway —
 (api-deejaytools). One repository, three Railway cron services, each with its
 own start command so a failure in one can never hide in another:
 
-| Service | Start command | Job | Task |
-|---|---|---|---|
-| `db-poller` | `python -m db_ops.poller` | Publishes both databases' metrics to CloudWatch, `MiniAppPolis/Postgres` | MINI-58 |
-| `db-backup` | `python -m db_ops.backup` | Nightly `pg_dump -Fc` of both databases to S3 — the copy that is not on Railway | MINI-63 |
-| `db-drill` | `python -m db_ops.drill` | Monthly: restores a point-in-time fork of each database and the latest S3 dump of each, verifies them, deletes them, and reports the measured RPO and RTO | MINI-64, MINI-65 |
+| Service | Start command | Job |
+|---|---|---|
+| `db-poller` | `python -m db_ops.poller` | Publishes both databases' metrics to CloudWatch, `MiniAppPolis/Postgres` |
+| `db-backup` | `python -m db_ops.backup` | Nightly `pg_dump -Fc` of both databases to S3 — the copy that is not on Railway |
+| `db-drill` | `python -m db_ops.drill` | Monthly: restores a point-in-time fork of each database and the latest S3 dump of each, verifies them, deletes them, and reports the measured RPO and RTO |
 
-All three are live: `db-poller` (MINI-58), `db-backup` (MINI-63) and
-`db-drill` (MINI-64, MINI-65).
+All three are live.
 
 All three run from one image, built from the root `Dockerfile`, which brings
 the PostgreSQL 18 client tools (`pg_dump`, `pg_restore`) from the PostgreSQL
@@ -76,7 +75,7 @@ A database it cannot reach publishes nothing for itself, which is what its
 `unreachable` alarm watches for; a failed publish fails the run. Production
 only, through `Effect.CLOUDWATCH_METRICS`.
 
-The alarms (MINI-61, mini-app-polis/infra `database_metrics.tf`), one set per
+The alarms (mini-app-polis/infra `database_metrics.tf`), one set per
 database, email through the `mini-app-polis-data-alerts` topic on alarm and
 on recovery. The `mini-app-polis-data` dashboard shows the same metrics.
 
@@ -126,7 +125,7 @@ tear the forks down, and deleting a fork's service by hand leaves its
 volume — a full copy of production — behind. If a run is cut short,
 delete each leftover fork's volume first, then the service.
 
-Then the **S3 dump layer** (MINI-65), for each database: the newest
+Then the **S3 dump layer**, for each database: the newest
 `daily/<database>/` dump is downloaded with the read-only key (its age is
 this layer's effective RPO), restored with `pg_restore --no-owner --no-acl
 --exit-on-error` into a throwaway PostgreSQL 18 that the drill starts inside
@@ -147,7 +146,7 @@ It needs a Railway token that may restore, read and delete services:
 `DB_DRILL_RAILWAY_TOKEN`. In production it is a **workspace** token
 (`DB_DRILL_RAILWAY_TOKEN_KIND=workspace`, set in `.railway/railway.ts`),
 because Railway refuses `volumeInstancePITRRestore` with a project token
-(found building MINI-64). That is a broad credential: it has its own Doppler
+(found building the drill). That is a broad credential: it has its own Doppler
 entry and only db-drill reads it. The code's default is still `project`, for
 the day Railway allows it.
 
@@ -179,7 +178,7 @@ the service.
 ## Recovery record
 
 What each production database can be recovered to, from what, and how fast
-— measured by `db-drill`, not estimated (MINI-66). There are two layers. The
+— measured by `db-drill`, not estimated. There are two layers. The
 Railway workspace is on the Hobby plan, so there are no volume backups and
 no third layer.
 
@@ -220,7 +219,7 @@ How to read it:
 
   Run `e58b74bc` (21:32) is the first clean run of both layers, with
   teardown confirmed. The evidence is the run reports in the Discord runs
-  channel and the comments on MINI-64 and MINI-65.
+  channel.
 - The drill repeats monthly (09:43 UTC on the 2nd). When a run's figures
   move outside the ranges above, update this table.
 

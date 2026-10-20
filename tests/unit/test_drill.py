@@ -372,6 +372,27 @@ def test_a_fork_that_never_appears_is_flagged() -> None:
     assert "did not appear" in " ".join(report.examples["drill_failed"])
 
 
+def test_a_restore_request_that_errors_after_railway_ran_it_is_torn_down() -> None:
+    # A timeout or a 5xx on the restore call does not mean Railway refused
+    # it: the fork can exist all the same, holding a credential that can
+    # write to production's WAL archive. It must not outlive the run.
+    api = Api()
+    accept = api.pitr_restore
+
+    def accept_then_time_out(volume_instance_id: str, target: Any, name: str) -> str:
+        accept(volume_instance_id, target, name)
+        raise RailwayApiError("Railway API request timed out")
+
+    api.pitr_restore = accept_then_time_out  # type: ignore[method-assign]
+
+    report, exc = _drill_all(api, Conn(), Conn())
+
+    assert isinstance(exc, DrillError)
+    assert report.issues["drill_failed"] == 2
+    assert not any(n.startswith("drill-") for n in api.services)
+    assert any(c[0] == "delete_service" for c in api.calls)
+
+
 def test_a_fork_that_survives_deletion_fails_the_run_loudly() -> None:
     api = Api(delete_sticks=False)
 

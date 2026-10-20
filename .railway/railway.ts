@@ -3,7 +3,7 @@
 // (.github/workflows/railway-plan.yml), and merging it plans again and
 // applies (railway-apply.yml), refusing to remove anything unless the pull
 // request is labelled allow-destroy. Nothing is applied from a workstation.
-// Railway itself does not read this file when it deploys. MINI-67.
+// Railway itself does not read this file when it deploys.
 //
 // A named partial: the ecosystem project holds services from several
 // repositories, so this file manages only what it declares — db-poller,
@@ -56,7 +56,7 @@ export default defineRailway((ctx) => {
     "SENTRY_DSN_COGS",
   ];
 
-  // Every 5 minutes (MINI-58).
+  // Every 5 minutes.
   const poller = service("db-poller", {
     ...cron("poller", "*/5 * * * *"),
     env: {
@@ -70,7 +70,7 @@ export default defineRailway((ctx) => {
     },
   });
 
-  // Nightly at 09:17 UTC (MINI-63).
+  // Nightly at 09:17 UTC.
   const backup = service("db-backup", {
     ...cron("backup", "17 9 * * *"),
     env: {
@@ -86,7 +86,7 @@ export default defineRailway((ctx) => {
     },
   });
 
-  // Monthly, 09:43 UTC on the 2nd (MINI-64, MINI-65). Never apply this
+  // Monthly, 09:43 UTC on the 2nd. Never apply this
   // file while a drill is running: a deploy stops the run before it can
   // tear its forks down (README).
   const drill = service("db-drill", {
@@ -101,7 +101,7 @@ export default defineRailway((ctx) => {
         "DB_DRILL_DATABASE_URL_KAIANOLEVINE",
         "DB_DRILL_RAILWAY_TOKEN",
       ),
-      // A project token cannot start a PITR restore (MINI-64).
+      // A project token cannot start a PITR restore.
       DB_DRILL_RAILWAY_TOKEN_KIND: "workspace",
     },
   });

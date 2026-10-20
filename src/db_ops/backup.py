@@ -2,7 +2,7 @@
 
 The copy that does not live on Railway. Point-in-time recovery covers a bad
 migration or a dropped table, but its archive is a Railway bucket; this is
-the backup for when Railway itself is the problem (MINI-62, MINI-63).
+the backup for when Railway itself is the problem.
 
 One run, for each database in :attr:`Settings.database_urls`:
 

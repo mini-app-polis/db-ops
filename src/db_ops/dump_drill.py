@@ -1,7 +1,7 @@
-"""db-drill, second layer — prove the nightly S3 dumps restore (MINI-65).
+"""db-drill, second layer — prove the nightly S3 dumps restore.
 
 Point-in-time recovery lives on Railway; the nightly ``pg_dump`` in S3 is the
-copy for when Railway itself is the problem (MINI-63). This proves that copy
+copy for when Railway itself is the problem. This proves that copy
 is usable, in the same monthly run as the PITR drill, for each database:
 
 1. Find the newest ``daily/<database>/`` dump in the backup bucket, with the

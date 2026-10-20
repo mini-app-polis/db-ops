@@ -49,16 +49,16 @@ exemptions:
     reason: >
       Looks for Lambda's get_remaining_time_in_millis. There is no Lambda
       clock on Railway; each service sets connect, statement and overall
-      deadlines on its own runs (MINI-58 onward), since a hung run blocks
+      deadlines on its own runs, since a hung run blocks
       every later scheduled start.
 
   - rule: CD-010
     reason: >
       Makes a pipeline cog's liveness layer a dead-letter-queue alarm. There
       is no queue. Liveness comes per service instead: the db-poller's
-      DatabaseReachable alarm doubles as its dead-man's switch (MINI-61),
-      db-backup pings Healthchecks.io (MINI-63), and db-drill sends a run
-      report on every monthly run, pass or fail (MINI-64).
+      DatabaseReachable alarm doubles as its dead-man's switch,
+      db-backup pings Healthchecks.io, and db-drill sends a run
+      report on every monthly run, pass or fail.
 
   - rule: CD-024
     reason: >
