@@ -1,3 +1,14 @@
+## [1.5.20](https://github.com/mini-app-polis/db-ops/compare/v1.5.19...v1.5.20) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.12.0 ([94bc825](https://github.com/mini-app-polis/db-ops/commit/94bc825d0a12b7b3687aa90c4141f9907a66334c))
+* **deps:** bump miniapppolis-common-utils to 6.13.0 ([eab1d03](https://github.com/mini-app-polis/db-ops/commit/eab1d03915ad5410aaef5f82a72b53c441921628))
+* **deps:** bump miniapppolis-common-utils to 6.14.0 ([a932c00](https://github.com/mini-app-polis/db-ops/commit/a932c00a02a7348a6bf2a3d998cdeddd17f59d0e))
+* **deps:** bump miniapppolis-common-utils to 6.15.0 ([27a605d](https://github.com/mini-app-polis/db-ops/commit/27a605d67e2c45d5636882cb3025b6647497bbae))
+* **deps:** patch vulnerable dependencies (virtualenv) ([06e4032](https://github.com/mini-app-polis/db-ops/commit/06e403239bc1c2e8de851e1d013fe97cf4b0a923))
+
 ## [1.5.19](https://github.com/mini-app-polis/db-ops/compare/v1.5.18...v1.5.19) (2026-10-21)
 
 
