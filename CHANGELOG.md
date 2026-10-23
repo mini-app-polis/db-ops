@@ -1,3 +1,10 @@
+## [1.5.26](https://github.com/mini-app-polis/db-ops/compare/v1.5.25...v1.5.26) (2026-10-23)
+
+
+### Bug Fixes
+
+* **config:** list every env var the code reads, and make the drill's untuned settings constants ([e53eb0e](https://github.com/mini-app-polis/db-ops/commit/e53eb0e88bde9230f839f93fd11bdcbfbe2c8ba6))
+
 ## [1.5.25](https://github.com/mini-app-polis/db-ops/compare/v1.5.24...v1.5.25) (2026-10-23)
 
 
