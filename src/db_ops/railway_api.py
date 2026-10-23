@@ -62,27 +62,40 @@ class Service:
 
 
 ENVIRONMENT_INSTANCES = """
-query EnvironmentInstances($environmentId: String!, $projectId: String!) {
+query EnvironmentInstances(
+  $environmentId: String!
+  $projectId: String!
+  $servicesAfter: String
+  $volumesAfter: String
+) {
   environment(id: $environmentId, projectId: $projectId) {
-    serviceInstances(first: 100) {
+    serviceInstances(first: 100, after: $servicesAfter) {
       edges { node { serviceId serviceName } }
+      pageInfo { hasNextPage endCursor }
     }
-    volumeInstances(first: 100) {
+    volumeInstances(first: 100, after: $volumesAfter) {
       edges { node { id serviceId deletedAt isPendingDeletion volume { id name } } }
+      pageInfo { hasNextPage endCursor }
     }
   }
 }
 """
 
 PROJECT_SERVICES = """
-query ProjectServices($projectId: String!) {
+query ProjectServices($projectId: String!, $after: String) {
   project(id: $projectId) {
-    services(first: 100) {
+    services(first: 100, after: $after) {
       edges { node { id name createdAt } }
+      pageInfo { hasNextPage endCursor }
     }
   }
 }
 """
+
+#: Pages read from one connection before giving up: 100 pages of 100 is far
+#: more than an environment holds, so reaching it means a cursor that never
+#: ends.
+MAX_PAGES = 100
 
 PITR_RESTORE = """
 mutation VolumeInstancePitrRestore(
@@ -224,14 +237,40 @@ class RailwayApi:
         A volume Railway has accepted for deletion is left out: deleting one
         is asynchronous, and it can stay listed, pending, for many minutes.
         """
-        data = self.query(
-            ENVIRONMENT_INSTANCES,
-            {"environmentId": self.environment_id, "projectId": self.project_id},
-        )
-        env = data.get("environment") or {}
+        # Both connections are paged in one query, each with its own cursor.
+        # Once one is exhausted its last cursor is sent again, and whatever
+        # comes back for it is ignored.
+        cursors: dict[str, str | None] = {
+            "serviceInstances": None,
+            "volumeInstances": None,
+        }
+        nodes: dict[str, list[dict[str, Any]]] = {name: [] for name in cursors}
+        pending = set(cursors)
+        for _ in range(MAX_PAGES):
+            data = self.query(
+                ENVIRONMENT_INSTANCES,
+                {
+                    "environmentId": self.environment_id,
+                    "projectId": self.project_id,
+                    "servicesAfter": cursors["serviceInstances"],
+                    "volumesAfter": cursors["volumeInstances"],
+                },
+            )
+            env = data.get("environment") or {}
+            for name in sorted(pending):
+                nodes[name].extend(_nodes(env.get(name)))
+                more, cursor = _next_page(env.get(name))
+                if more:
+                    cursors[name] = cursor
+                else:
+                    pending.discard(name)
+            if not pending:
+                break
+        else:
+            raise RailwayApiError("Railway API kept paging the environment")
         services = [
             ServiceInstance(service_id=n["serviceId"], name=n["serviceName"])
-            for n in _nodes(env.get("serviceInstances"))
+            for n in nodes["serviceInstances"]
         ]
         volumes = [
             VolumeInstance(
@@ -240,7 +279,7 @@ class RailwayApi:
                 service_id=n.get("serviceId"),
                 name=(n.get("volume") or {}).get("name", ""),
             )
-            for n in _nodes(env.get("volumeInstances"))
+            for n in nodes["volumeInstances"]
             if not (n.get("deletedAt") or n.get("isPendingDeletion"))
         ]
         return services, volumes
@@ -257,7 +296,19 @@ class RailwayApi:
 
     def project_services(self) -> list[Service]:
         """Every service in the project, with its creation time."""
-        data = self.query(PROJECT_SERVICES, {"projectId": self.project_id})
+        found: list[dict[str, Any]] = []
+        after: str | None = None
+        for _ in range(MAX_PAGES):
+            data = self.query(
+                PROJECT_SERVICES, {"projectId": self.project_id, "after": after}
+            )
+            connection = (data.get("project") or {}).get("services")
+            found.extend(_nodes(connection))
+            more, after = _next_page(connection)
+            if not more:
+                break
+        else:
+            raise RailwayApiError("Railway API kept paging the project's services")
         return [
             Service(
                 service_id=n["id"],
@@ -266,7 +317,7 @@ class RailwayApi:
                     n["createdAt"].replace("Z", "+00:00")
                 ),
             )
-            for n in _nodes((data.get("project") or {}).get("services"))
+            for n in found
         ]
 
     def workflow_status(self, workflow_id: str) -> tuple[str, str | None]:
@@ -324,6 +375,15 @@ class RailwayApi:
 
 class _Retryable(RailwayApiError):
     """A 429 or 5xx: the request may not have run."""
+
+
+def _next_page(connection: Any) -> tuple[bool, str | None]:
+    """Whether a connection has another page, and the cursor to ask from."""
+    if not isinstance(connection, dict):
+        return False, None
+    info = connection.get("pageInfo") or {}
+    cursor = info.get("endCursor")
+    return bool(info.get("hasNextPage") and cursor), cursor
 
 
 def _nodes(connection: Any) -> list[dict[str, Any]]:

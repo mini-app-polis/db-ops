@@ -24,7 +24,7 @@ def _settings(**overrides: Any) -> Settings:
         "db_poller_database_url_deejaytools": "postgresql://metrics@b/railway",
         "db_poller_aws_access_key_id": "AKIATEST",
         "db_poller_aws_secret_access_key": "secret",
-        "run_timeout_seconds": 60.0,
+        "db_poller_run_timeout_seconds": 60.0,
     }
     values.update(overrides)
     return Settings(**values)
@@ -195,7 +195,7 @@ def test_an_exhausted_budget_stops_the_run(cloudwatch: FakeCloudWatch) -> None:
     report = FakeReport()
     with pytest.raises(PollerError):
         poller.poll(
-            _settings(run_timeout_seconds=0),
+            _settings(db_poller_run_timeout_seconds=0),
             report,  # type: ignore[arg-type]
             NOW,
             connect=lambda url, settings: FakeConn(),
@@ -210,7 +210,7 @@ def test_connections_carry_their_timeouts(monkeypatch: pytest.MonkeyPatch) -> No
         seen.update(kwargs)
 
     monkeypatch.setattr(poller.psycopg, "connect", fake_connect)
-    poller._connect("postgresql://x", _settings(db_statement_timeout_ms=1234))
+    poller._connect("postgresql://x", _settings(db_poller_db_statement_timeout_ms=1234))
 
     assert seen["connect_timeout"] == 10
     assert seen["options"] == "-c statement_timeout=1234"

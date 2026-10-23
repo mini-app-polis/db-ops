@@ -50,9 +50,26 @@ class S3:
 
         return Pages()
 
-    def download_file(self, bucket: str, key: str, target: str) -> None:
-        self.downloaded.append(key)
-        Path(target).write_bytes(b"PGDMP")
+    def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+        self.downloaded.append(Key)
+        return {"Body": Body([b"PGDMP"])}
+
+
+class Body:
+    """A streaming body that hands out its chunks, then nothing."""
+
+    def __init__(self, chunks: list[bytes], on_read: Any = None) -> None:
+        self.chunks = list(chunks)
+        self.on_read = on_read
+        self.closed = False
+
+    def read(self, size: int) -> bytes:
+        if self.on_read:
+            self.on_read()
+        return self.chunks.pop(0) if self.chunks else b""
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _bucket(**ages: float) -> S3:
@@ -99,6 +116,7 @@ def _run(
     copy: Conn | None = None,
     source: Conn | None = None,
     scratch: Scratch | None = None,
+    deadline: float | None = None,
     **settings: Any,
 ) -> tuple[RunReport, Any, Scratch]:
     scratch = scratch or Scratch(tmp_path)
@@ -113,6 +131,7 @@ def _run(
         result: Any = dump_drill.drill_all(
             _settings(**settings),
             report,
+            deadline=deadline,
             s3=s3,
             scratch_factory=lambda bin_dir: scratch,  # type: ignore[arg-type,return-value]
             connect_to=connect_to,
@@ -196,6 +215,70 @@ def test_the_restored_copy_is_checked_against_the_source(
     report, result, _ = _run(tmp_path, _bucket(), copy=copy, source=source)
 
     assert (not report.issues) is ok
+
+
+def test_a_slow_download_runs_out_of_time(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(dump_drill.time, "monotonic", lambda: clock[0])
+
+    def _tick() -> None:
+        clock[0] += 400  # each chunk takes 400 s
+
+    class SlowS3(S3):
+        def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+            self.downloaded.append(Key)
+            self.body = Body([b"x"] * 10, on_read=_tick)
+            return {"Body": self.body}
+
+    s3 = SlowS3(_bucket().keys)
+    scratch = Scratch(tmp_path)
+
+    report, result, _ = _run(
+        tmp_path, s3, scratch=scratch, dump_restore_timeout_seconds=1000
+    )
+
+    assert isinstance(result, DrillError)
+    assert report.issues.get("dump_drill_failed") == 2
+    assert scratch.restored == []
+    assert s3.body.closed
+    assert not list(tmp_path.glob("*.dump"))
+
+
+def test_the_restore_gets_only_what_the_run_has_left(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(dump_drill.time, "monotonic", lambda: 1000.0)
+    timeouts: list[float] = []
+
+    class TimedScratch(Scratch):
+        def restore(self, dbname: str, dump: Path, timeout: float) -> None:
+            timeouts.append(timeout)
+            super().restore(dbname, dump, timeout)
+
+    _run(
+        tmp_path,
+        _bucket(),
+        scratch=TimedScratch(tmp_path),
+        deadline=1300.0,
+        dump_restore_timeout_seconds=1200,
+    )
+
+    assert timeouts == [300.0, 300.0]
+
+
+def test_a_database_not_started_before_the_deadline_is_out_of_time(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(dump_drill.time, "monotonic", lambda: 2000.0)
+    s3 = _bucket()
+
+    report, result, scratch = _run(tmp_path, s3, deadline=1999.0)
+
+    assert isinstance(result, DrillError)
+    assert report.issues.get("out_of_time") == 2
+    assert s3.downloaded == []
 
 
 def test_a_scratch_server_that_will_not_start_fails_the_layer(tmp_path: Path) -> None:

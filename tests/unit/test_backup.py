@@ -33,8 +33,8 @@ def _settings(**overrides: Any) -> Settings:
         "db_backup_database_url_kaianolevine": URLS["kaianolevine"],
         "db_backup_database_url_deejaytools": URLS["deejaytools"],
         "healthchecks_url_db_backup": "https://hc-ping.com/test-check",
-        "run_timeout_seconds": 60.0,
-        "db_connect_timeout_seconds": 5,
+        "db_backup_run_timeout_seconds": 60.0,
+        "db_backup_db_connect_timeout_seconds": 5,
     }
     values.update(overrides)
     return Settings(**values)
@@ -179,7 +179,7 @@ def test_an_exhausted_budget_skips_the_rest(
 
     with pytest.raises(BackupError):
         backup.back_up(
-            _settings(run_timeout_seconds=0),
+            _settings(db_backup_run_timeout_seconds=0),
             report,  # type: ignore[arg-type]
             datetime(2026, 10, 15, tzinfo=UTC),
         )
@@ -245,6 +245,89 @@ def test_dump_raises_without_echoing_the_connection_string(
         )
     assert "s3cret" not in str(caught.value)
     assert "--format=custom" in calls[0]
+
+
+def test_the_password_goes_in_the_environment_not_the_arguments(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    secret_url = "postgresql://backup:s3%2Fcret@postgres.railway.internal:5432/railway"
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def _run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append((args, kwargs["env"]))
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(backup.subprocess, "run", _run)
+    backup.dump(
+        secret_url,
+        tmp_path / "x.dump",
+        timeout=10,
+        connect_timeout=1,
+        lock_wait_timeout=1,
+    )
+
+    [(argv, env)] = calls
+    assert not any("s3" in arg and "cret" in arg for arg in argv)
+    assert env["PGPASSWORD"] == "s3/cret"
+    [dbname] = [arg for arg in argv if arg.startswith("--dbname=")]
+    assert "postgres.railway.internal" in dbname and "backup" in dbname
+
+
+def test_a_malformed_url_is_refused_without_echoing_it(tmp_path: Path) -> None:
+    with pytest.raises(BackupError) as caught:
+        backup.dump(
+            "postgresql://backup:s3cret@host/db?bogus=1",
+            tmp_path / "x.dump",
+            timeout=10,
+            connect_timeout=1,
+            lock_wait_timeout=1,
+        )
+    assert "s3cret" not in str(caught.value)
+
+
+def test_each_service_reads_only_its_own_timeout_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from db_ops import drill, poller
+
+    # The old shared names are not read by anyone.
+    monkeypatch.setenv("RUN_TIMEOUT_SECONDS", "7")
+    monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", "7")
+    monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "7")
+    monkeypatch.setenv("DB_BACKUP_RUN_TIMEOUT_SECONDS", "99")
+    monkeypatch.setenv("DB_BACKUP_DB_CONNECT_TIMEOUT_SECONDS", "9")
+
+    own = ("db_backup_run_timeout_seconds", "db_backup_db_connect_timeout_seconds")
+    backup_settings = Settings(
+        **{k: v for k, v in _settings().model_dump().items() if k not in own}
+    )
+    assert backup_settings.db_backup_run_timeout_seconds == 99
+    assert backup_settings.db_backup_db_connect_timeout_seconds == 9
+
+    poller_settings = poller.Settings(
+        db_poller_database_url_kaianolevine="postgresql://a/x",
+        db_poller_database_url_deejaytools="postgresql://b/x",
+        db_poller_aws_access_key_id="AKIATEST",
+        db_poller_aws_secret_access_key="secret",
+    )
+    assert poller_settings.db_poller_run_timeout_seconds == 120
+    assert poller_settings.db_poller_db_connect_timeout_seconds == 10
+    assert poller_settings.db_poller_db_statement_timeout_ms == 5000
+
+    drill_settings = drill.Settings(
+        db_drill_database_url_kaianolevine="postgresql://a/x",
+        db_drill_database_url_deejaytools="postgresql://b/x",
+        db_drill_railway_token="tok",
+        railway_project_id="proj",
+        railway_environment_id="env",
+        railway_environment_name="production",
+        db_backup_bucket="backups",
+        db_drill_aws_access_key_id="AKIATEST",
+        db_drill_aws_secret_access_key="secret",
+    )
+    assert drill_settings.db_drill_run_timeout_seconds == 5400
+    assert drill_settings.db_drill_db_connect_timeout_seconds == 10
+    assert drill_settings.db_drill_db_statement_timeout_ms == 60_000
 
 
 def test_a_missing_pg_dump_is_a_backup_error(

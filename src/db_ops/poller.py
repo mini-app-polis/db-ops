@@ -78,9 +78,9 @@ class Settings(BaseSettings):
     db_ops_api_key: SecretStr | None = None
 
     #: The whole run's budget, well inside the five-minute schedule.
-    run_timeout_seconds: float = 120
-    db_connect_timeout_seconds: int = 10
-    db_statement_timeout_ms: int = 5000
+    db_poller_run_timeout_seconds: float = 120
+    db_poller_db_connect_timeout_seconds: int = 10
+    db_poller_db_statement_timeout_ms: int = 5000
     cloudwatch_timeout_seconds: int = 10
 
     @property
@@ -204,9 +204,9 @@ def _connect(url: str, settings: Settings) -> psycopg.Connection[Any]:
     return psycopg.connect(
         url,
         autocommit=True,
-        connect_timeout=settings.db_connect_timeout_seconds,
+        connect_timeout=settings.db_poller_db_connect_timeout_seconds,
         application_name=SERVICE,
-        options=f"-c statement_timeout={settings.db_statement_timeout_ms}",
+        options=f"-c statement_timeout={settings.db_poller_db_statement_timeout_ms}",
     )
 
 
@@ -240,7 +240,7 @@ def poll(
     Raises :class:`PollerError` if a database's metrics were read but could
     not be published: that is this service broken, not a database down.
     """
-    deadline = time.monotonic() + settings.run_timeout_seconds
+    deadline = time.monotonic() + settings.db_poller_run_timeout_seconds
     client = _cloudwatch_client(settings)
     published: dict[str, int] = {}
     failed: list[str] = []
