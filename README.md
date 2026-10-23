@@ -27,18 +27,18 @@ the `backup` role (`pg_read_all_data`, nothing else) over private networking
 and uploads the dump with the write-only key:
 
 ```
-daily/<database>/<UTC timestamp>.dump      every run    (kept 30 days)
-monthly/<database>/<UTC timestamp>.dump    on the 1st   (kept 90 days)
+daily/<database>/<UTC timestamp>.dump      every run
+monthly/<database>/<UTC timestamp>.dump    on the 1st
 ```
 
-The bucket (mini-app-polis/infra `database_backups.tf`) is versioned, and
-every object version sits under a 7-day governance-mode Object Lock, so not
-even the writer's key can delete or overwrite a fresh dump. db-backup's key
+The bucket, its versioning, its Object Lock and how long each prefix is kept
+are declared in mini-app-polis/infra. The lock means not even the writer's
+key can delete or overwrite a fresh dump. db-backup's key
 (`db-backup-writer`) can only `PutObject` under `daily/` and `monthly/`: a
 leaked key can add dumps but cannot read, list or delete one. db-drill reads
 with a separate key (`db-backup-reader`: `GetObject` and `ListBucket` only).
-Governance rather than compliance mode, so that a deejaytools user's erasure
-request can still reach the backups.
+The lock is governance rather than compliance mode, so that a deejaytools
+user's erasure request can still reach the backups.
 
 Both databases are attempted whatever happens to the other. Any failure
 ends the run with exit 1, a Sentry event, a Healthchecks.io `/fail` ping and
@@ -72,22 +72,13 @@ them in one `PutMetricData` under `MiniAppPolis/Postgres`, dimension
 | `WalDirSize` | Bytes | `pg_ls_waldir()` |
 
 A database it cannot reach publishes nothing for itself, which is what its
-`unreachable` alarm watches for; a failed publish fails the run. Production
+missing-data alarm watches for; a failed publish fails the run. Production
 only, through `Effect.CLOUDWATCH_METRICS`.
 
-The alarms (mini-app-polis/infra `database_metrics.tf`), one set per
-database, email through the `mini-app-polis-data-alerts` topic on alarm and
-on recovery. The `mini-app-polis-data` dashboard shows the same metrics.
-
-| Alarm | Fires when |
-|---|---|
-| `postgres-<db>-unreachable` | No `Connections` sample for 3 periods in a row (15 min). Missing data counts as breaching, so this is the alarm for a database, or the poller, that has gone quiet |
-| `postgres-<db>-connections-high` | `ConnectionUtilization` above 80% for 2 periods |
-| `postgres-<db>-archive-failing` | `ArchiveFailedCount` rises in 2 periods in a row: WAL is not reaching the PITR archive |
-| `postgres-<db>-wal-dir-filling` | `WalDirSize` above 1.5 GiB for 3 periods: the archive is falling behind, short of pgBackRest's ~2.2 GiB cap, past which it drops WAL and PITR has a hole |
-
-Only `unreachable` treats missing data as breaching; the rest leave a
-silent database to it.
+The alarms on these metrics, one set per database, and the dashboard that
+shows them are declared in mini-app-polis/infra. One alarm per database
+treats missing data as breaching, so a database, or the poller, that has
+gone quiet is caught; the others leave a silent database to it.
 
 ## db-drill
 
@@ -230,8 +221,9 @@ deejaytools holds real users' data. A row deleted from the live database is
 
 - point-in-time recovery: up to about **4–5 weeks** (the oldest retained
   weekly full backup and the WAL after it);
-- nightly dumps in S3: `daily/` up to **38 days** (30-day expiry, then
-  8 days as a noncurrent version), `monthly/` up to **98 days** (90 + 8).
+- nightly dumps in S3: until the bucket's lifecycle expires them, plus the
+  time an expired dump is kept as a noncurrent version. Both periods, for
+  `daily/` and `monthly/`, are declared in mini-app-polis/infra.
 
 The data-erasure path deejaytools does not have yet must say so: erasure
 reaches the live database at once and the backups when they expire, and
@@ -274,9 +266,13 @@ after the first rehearsal or real use.
    | Database | Consumer | Setting |
    |---|---|---|
    | `kaianolevine` | api-kaianolevine-com | `DATABASE_URL` (a reference to the `Postgres` service, held on the service, not in Doppler), and `DATABASE_URL_MIGRATIONS` where set |
-   | `kaianolevine` | db-ops | `DB_POLLER_` / `DB_BACKUP_` / `DB_DRILL_DATABASE_URL_KAIANOLEVINE` (Doppler `prd`), and `DB_DRILL_SOURCE_SERVICE_KAIANOLEVINE` if the service name changed |
+   | `kaianolevine` | db-ops | `DB_POLLER_` / `DB_BACKUP_` / `DB_DRILL_DATABASE_URL_KAIANOLEVINE` (Doppler `prd`) |
    | `deejaytools` | api-deejaytools | `DEEJAYTOOLS_DATABASE_URL` (a reference to `Postgres-deejaytools`), and `DEEJAYTOOLS_DATABASE_URL_MIGRATIONS` where set |
-   | `deejaytools` | db-ops | the same three `…_DEEJAYTOOLS` URLs, and `DB_DRILL_SOURCE_SERVICE_DEEJAYTOOLS` |
+   | `deejaytools` | db-ops | the same three `…_DEEJAYTOOLS` URLs |
+
+   If the database now lives in a service with a different name, db-drill
+   needs a code change, not a Doppler change: the service names it drills
+   are constants (`SOURCE_SERVICES` in `src/db_ops/drill.py`).
 
 5. **The fork is not archiving.** Enable PITR on it (Backups tab; it gets its
    own bucket), or the database has no point-in-time recovery from here on.
@@ -293,7 +289,7 @@ after the first rehearsal or real use.
    aws s3 ls "s3://$DB_BACKUP_BUCKET/daily/deejaytools/"
    aws s3 cp "s3://$DB_BACKUP_BUCKET/daily/deejaytools/<stamp>.dump" .
    ```
-   Use `monthly/` for anything older than 30 days.
+   Use `monthly/` for anything older than `daily/` keeps.
 2. Create a new PostgreSQL 18 database. `kaianolevine` needs `pgvector`
    available on the server, because its schema creates the `vector` extension.
 3. Restore: `pg_restore --no-owner --no-acl --exit-on-error -d "<new url>"

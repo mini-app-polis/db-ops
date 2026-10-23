@@ -64,7 +64,8 @@ exemptions:
     reason: >
       Reads memory_size and timeout from the cog's Lambda module block.
       There is no Lambda function. Each Railway service's settings and the
-      run budget each service sets on itself (RUN_TIMEOUT_SECONDS) are its
+      run budget each service sets on itself (DB_BACKUP_RUN_TIMEOUT_SECONDS,
+      DB_POLLER_RUN_TIMEOUT_SECONDS, DB_DRILL_RUN_TIMEOUT_SECONDS) are its
       ceiling.
 
   - rule: PY-013

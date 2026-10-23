@@ -317,3 +317,76 @@ def test_a_volume_pending_deletion_counts_as_gone() -> None:
     _, volumes = _api().environment_instances()
 
     assert [(v.volume_id, v.name) for v in volumes] == [("v-3", "kept")]
+
+
+def _page(name: str, nodes: list[dict[str, object]], cursor: str | None) -> dict:
+    return {
+        name: {
+            "edges": [{"node": n} for n in nodes],
+            "pageInfo": {"hasNextPage": cursor is not None, "endCursor": cursor},
+        }
+    }
+
+
+@respx.mock
+def test_every_page_of_the_environment_is_read() -> None:
+    svc = lambda i: {"serviceId": f"s{i}", "serviceName": f"drill-{i}"}  # noqa: E731
+    vol = lambda i: {"id": f"vi{i}", "serviceId": None, "volume": {"id": f"v{i}"}}  # noqa: E731
+    route = respx.post(DEFAULT_URL).mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "environment": {
+                            **_page("serviceInstances", [svc(1)], "c-s1"),
+                            **_page("volumeInstances", [vol(1)], None),
+                        }
+                    }
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "environment": {
+                            **_page("serviceInstances", [svc(2)], None),
+                            # Exhausted: whatever comes back is ignored.
+                            **_page("volumeInstances", [vol(1)], None),
+                        }
+                    }
+                },
+            ),
+        ]
+    )
+
+    services, volumes = _api().environment_instances()
+
+    assert [s.service_id for s in services] == ["s1", "s2"]
+    assert [v.instance_id for v in volumes] == ["vi1"]
+    assert _sent(route, 0)["variables"]["servicesAfter"] is None  # type: ignore[index]
+    assert _sent(route, 1)["variables"]["servicesAfter"] == "c-s1"  # type: ignore[index]
+
+
+@respx.mock
+def test_every_page_of_the_projects_services_is_read() -> None:
+    node = lambda i: {  # noqa: E731
+        "id": f"s{i}",
+        "name": f"drill-{i}",
+        "createdAt": "2026-10-15T19:00:00.000Z",
+    }
+    route = respx.post(DEFAULT_URL).mock(
+        side_effect=[
+            httpx.Response(
+                200, json={"data": {"project": _page("services", [node(1)], "c1")}}
+            ),
+            httpx.Response(
+                200, json={"data": {"project": _page("services", [node(2)], None)}}
+            ),
+        ]
+    )
+
+    services = _api().project_services()
+
+    assert [s.service_id for s in services] == ["s1", "s2"]
+    assert _sent(route, 1)["variables"]["after"] == "c1"  # type: ignore[index]

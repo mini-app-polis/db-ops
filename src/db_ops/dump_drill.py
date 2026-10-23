@@ -46,6 +46,9 @@ LOG = log.get_logger()
 #: outside this container can reach it.
 SCRATCH_USER = "drill"
 
+#: How much of a dump is read from S3 between checks of the deadline.
+DOWNLOAD_CHUNK_BYTES = 8 * 1024 * 1024
+
 
 class ScratchPostgres:
     """A throwaway PostgreSQL server in a temporary directory.
@@ -201,6 +204,24 @@ def latest_dump(s3: Any, bucket: str, database: str) -> tuple[str, datetime]:
     return newest
 
 
+def download(s3: Any, bucket: str, key: str, target: Path, deadline: float) -> None:
+    """Stream one object to ``target``, stopping once ``deadline`` passes.
+
+    Read in chunks so the deadline is checked as the bytes arrive: a stalled
+    or slow transfer cannot outlast the run. botocore's read timeout bounds
+    each chunk.
+    """
+    body = s3.get_object(Bucket=bucket, Key=key)["Body"]
+    try:
+        with target.open("wb") as out:
+            while chunk := body.read(DOWNLOAD_CHUNK_BYTES):
+                out.write(chunk)
+                if time.monotonic() >= deadline:
+                    raise DrillError(f"the download of {key} ran out of time")
+    finally:
+        body.close()
+
+
 def drill(
     s3: Any,
     scratch: ScratchPostgres,
@@ -210,9 +231,15 @@ def drill(
     report: RunReport,
     now: datetime,
     *,
+    deadline: float = float("inf"),
     connect_to: Connect = connect,
 ) -> dict[str, float]:
-    """Restore one database's newest dump and check it. Returns its figures."""
+    """Restore one database's newest dump and check it. Returns its figures.
+
+    The download and the restore together stop after
+    ``dump_restore_timeout_seconds``, or at the run's ``deadline`` if that is
+    sooner.
+    """
     key, written_at = latest_dump(s3, settings.db_backup_bucket, database)
     age_hours = round((now - written_at).total_seconds() / 3600, 1)
     LOG.info(
@@ -221,10 +248,14 @@ def drill(
 
     target = scratch.root / f"{database}.dump"
     started = time.monotonic()
+    stop = min(started + settings.dump_restore_timeout_seconds, deadline)
     try:
-        s3.download_file(settings.db_backup_bucket, key, str(target))
+        download(s3, settings.db_backup_bucket, key, target, stop)
         size = target.stat().st_size
-        scratch.restore(database, target, settings.dump_restore_timeout_seconds)
+        remaining = stop - time.monotonic()
+        if remaining <= 0:
+            raise DrillError(f"no time left to restore {key}")
+        scratch.restore(database, target, remaining)
     finally:
         target.unlink(missing_ok=True)
     restore_seconds = round(time.monotonic() - started)
@@ -259,12 +290,20 @@ def drill_all(
     settings: Settings,
     report: RunReport,
     *,
+    deadline: float | None = None,
     s3: Any = None,
     scratch_factory: Callable[[str], ScratchPostgres] = ScratchPostgres,
     connect_to: Connect = connect,
     now: datetime | None = None,
 ) -> dict[str, dict[str, float]]:
-    """Drill each database's newest dump. Raises if any failed."""
+    """Drill each database's newest dump. Raises if any failed.
+
+    ``deadline`` is the run's, on the ``time.monotonic`` clock, shared with
+    the PITR layer; without one, the whole run budget starts now. A database
+    not started by then is recorded as out of time.
+    """
+    if deadline is None:
+        deadline = time.monotonic() + settings.db_drill_run_timeout_seconds
     s3 = s3 or s3_client(settings)
     now = now or datetime.now(UTC)
     figures: dict[str, dict[str, float]] = {}
@@ -277,6 +316,10 @@ def drill_all(
             report.issue("dump_drill_failed", "scratch server", detail=str(exc)[:300])
             raise DrillError(f"the scratch Postgres did not start: {exc}") from None
         for database, (_, url) in settings.databases.items():
+            if time.monotonic() >= deadline:
+                report.issue("out_of_time", database)
+                failed.append(database)
+                continue
             try:
                 figures[database] = drill(
                     s3,
@@ -286,6 +329,7 @@ def drill_all(
                     settings,
                     report,
                     now,
+                    deadline=deadline,
                     connect_to=connect_to,
                 )
                 report.ok()

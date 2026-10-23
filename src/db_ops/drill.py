@@ -69,6 +69,14 @@ SERVICE = "db-drill"
 REPO = "db-ops"
 FORK_PREFIX = "drill-"
 
+#: Which Railway service holds each database, by name. A constant, not a
+#: setting: a renamed Postgres service needs a change here (README,
+#: "Recovering a database").
+SOURCE_SERVICES = {
+    "kaianolevine": "Postgres",
+    "deejaytools": "Postgres-deejaytools",
+}
+
 LOG = log.get_logger()
 
 Sleep = Callable[[float], None]
@@ -102,10 +110,6 @@ class Settings(BaseSettings):
     #: so the same URL with the fork's host reaches it.
     db_drill_database_url_kaianolevine: SecretStr
     db_drill_database_url_deejaytools: SecretStr
-    #: Which Railway service holds each database, by name.
-    db_drill_source_service_kaianolevine: str = "Postgres"
-    db_drill_source_service_deejaytools: str = "Postgres-deejaytools"
-
     db_drill_railway_token: SecretStr
     db_drill_railway_token_kind: TokenKind = "project"
     railway_project_id: str
@@ -114,8 +118,9 @@ class Settings(BaseSettings):
     #: Read by mini_app_polis's KaianoApiClient when the run report is sent.
     db_ops_api_key: SecretStr | None = None
 
-    #: The whole run's budget: two restores, one after the other.
-    run_timeout_seconds: float = 5400
+    #: The whole run's budget, shared by both layers: two restores, one
+    #: after the other, then the dump drill in what is left.
+    db_drill_run_timeout_seconds: float = 5400
     #: How long the fence's WAL segment may take to reach the archive. The
     #: databases switch segments at least every 60 s (archive_timeout).
     archive_wait_seconds: float = 300
@@ -126,8 +131,8 @@ class Settings(BaseSettings):
     poll_interval_seconds: float = 15
     #: Between the canary and the fence; the restore target falls between.
     fence_gap_seconds: float = 2
-    db_connect_timeout_seconds: int = 10
-    db_statement_timeout_ms: int = 60_000
+    db_drill_db_connect_timeout_seconds: int = 10
+    db_drill_db_statement_timeout_ms: int = 60_000
     #: A source table with at least this many rows must not be empty in the
     #: fork. A smaller one may have been empty at the target.
     key_table_min_rows: int = 100
@@ -144,7 +149,8 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     #: The PostgreSQL 18 server binaries the image installs.
     pg_bin_dir: str = "/usr/lib/postgresql/18/bin"
-    #: One dump's download and pg_restore.
+    #: One dump's download and pg_restore together, capped by what is left
+    #: of the run.
     dump_restore_timeout_seconds: float = 1200
     #: The newest dump older than this means db-backup has stopped.
     dump_max_age_hours: float = 36
@@ -154,11 +160,11 @@ class Settings(BaseSettings):
         """Database name -> (its Railway service name, its connection string)."""
         return {
             "kaianolevine": (
-                self.db_drill_source_service_kaianolevine,
+                SOURCE_SERVICES["kaianolevine"],
                 self.db_drill_database_url_kaianolevine.get_secret_value(),
             ),
             "deejaytools": (
-                self.db_drill_source_service_deejaytools,
+                SOURCE_SERVICES["deejaytools"],
                 self.db_drill_database_url_deejaytools.get_secret_value(),
             ),
         }
@@ -212,9 +218,9 @@ def connect(url: str, settings: Settings) -> psycopg.Connection[Any]:
     return psycopg.connect(
         url,
         autocommit=True,
-        connect_timeout=settings.db_connect_timeout_seconds,
+        connect_timeout=settings.db_drill_db_connect_timeout_seconds,
         application_name=SERVICE,
-        options=f"-c statement_timeout={settings.db_statement_timeout_ms}",
+        options=f"-c statement_timeout={settings.db_drill_db_statement_timeout_ms}",
     )
 
 
@@ -590,16 +596,22 @@ def drill_all(
     report: RunReport,
     run_id: str,
     *,
+    deadline: float | None = None,
     sleep: Sleep = time.sleep,
     connect_to: Connect = connect,
 ) -> dict[str, dict[str, int]]:
-    """Drill each database in turn. Raises if any drill or teardown failed."""
+    """Drill each database in turn. Raises if any drill or teardown failed.
+
+    ``deadline`` is the run's, on the ``time.monotonic`` clock; without one,
+    the whole run budget starts now.
+    """
     if settings.railway_environment_name != "production":
         raise DrillError(
             f"refusing to drill from the {settings.railway_environment_name!r} "
             "Railway environment: forks hold production data"
         )
-    deadline = time.monotonic() + settings.run_timeout_seconds
+    if deadline is None:
+        deadline = time.monotonic() + settings.db_drill_run_timeout_seconds
     figures: dict[str, dict[str, int]] = {}
     failed: list[str] = []
 
@@ -670,6 +682,9 @@ def work(run_id: str) -> dict[str, Any]:
         return {"service": SERVICE, "skipped": True}
 
     settings = Settings.from_env()
+    # One deadline for the whole run: the dump layer gets what the PITR
+    # layer leaves.
+    deadline = time.monotonic() + settings.db_drill_run_timeout_seconds
     api = RailwayApi(
         settings.db_drill_railway_token.get_secret_value(),
         settings.db_drill_railway_token_kind,
@@ -683,11 +698,13 @@ def work(run_id: str) -> dict[str, Any]:
         # Each layer is drilled whatever happened to the other: a broken
         # PITR drill must not hide whether the dumps restore, or the reverse.
         try:
-            figures["pitr"] = drill_all(api, settings, report, run_id)
+            figures["pitr"] = drill_all(
+                api, settings, report, run_id, deadline=deadline
+            )
         except DrillError as exc:
             failures.append(f"pitr: {exc}")
         try:
-            figures["dump"] = dump_drill.drill_all(settings, report)
+            figures["dump"] = dump_drill.drill_all(settings, report, deadline=deadline)
         except DrillError as exc:
             failures.append(f"dump: {exc}")
     finally:

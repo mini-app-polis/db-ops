@@ -35,9 +35,11 @@ from typing import Any
 
 import boto3
 import httpx
+import psycopg
 from mini_app_polis import logger as log
 from mini_app_polis.environment import Effect, effect_enabled, is_production
 from mini_app_polis.pipeline_status import RunReport
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -79,8 +81,8 @@ class Settings(BaseSettings):
     #: The whole run's budget. Railway skips a scheduled start while the
     #: previous run is still going, so a hung dump would take every later
     #: night with it; the run stops itself instead.
-    run_timeout_seconds: float = 1800
-    db_connect_timeout_seconds: int = 15
+    db_backup_run_timeout_seconds: float = 1800
+    db_backup_db_connect_timeout_seconds: int = 15
     #: How long pg_dump waits for a table lock before giving up, rather than
     #: queueing behind a long migration.
     db_lock_wait_timeout_seconds: int = 60
@@ -162,12 +164,19 @@ def dump(
     connect_timeout: int,
     lock_wait_timeout: int,
 ) -> None:
-    """Run pg_dump into ``target``. Raises BackupError without echoing the URL."""
+    """Run pg_dump into ``target``. Raises BackupError without echoing the URL.
+
+    The password goes to pg_dump in PGPASSWORD, never on its command line,
+    where any process on the host could read it.
+    """
+    dbname, password = _split_password(url)
     env = {
         **os.environ,
         "PGCONNECT_TIMEOUT": str(connect_timeout),
         "PGAPPNAME": SERVICE,
     }
+    if password is not None:
+        env["PGPASSWORD"] = password
     try:
         result = subprocess.run(
             [
@@ -175,7 +184,7 @@ def dump(
                 "--format=custom",
                 f"--lock-wait-timeout={lock_wait_timeout}s",
                 f"--file={target}",
-                f"--dbname={url}",
+                f"--dbname={dbname}",
             ],
             env=env,
             capture_output=True,
@@ -192,6 +201,17 @@ def dump(
         raise BackupError(
             f"pg_dump exited {result.returncode}: {result.stderr.strip()[-500:]}"
         )
+
+
+def _split_password(url: str) -> tuple[str, str | None]:
+    """A connection string without its password, and the password."""
+    try:
+        params = conninfo_to_dict(url)
+    except psycopg.ProgrammingError:
+        # The message would quote the connection string.
+        raise BackupError("the database URL is not a valid connection string") from None
+    password = params.pop("password", None)
+    return make_conninfo("", **params), None if password is None else str(password)
 
 
 def upload(client: Any, settings: Settings, source: Path, key: str) -> None:
@@ -223,7 +243,7 @@ def back_up(settings: Settings, report: RunReport, now: datetime) -> list[str]:
     Each database is attempted whatever happened to the one before it;
     failures are recorded on the report and raised together at the end.
     """
-    deadline = time.monotonic() + settings.run_timeout_seconds
+    deadline = time.monotonic() + settings.db_backup_run_timeout_seconds
     client = _s3_client(settings)
     written: list[str] = []
     failed: list[str] = []
@@ -241,7 +261,7 @@ def back_up(settings: Settings, report: RunReport, now: datetime) -> list[str]:
                     url,
                     target,
                     timeout=remaining,
-                    connect_timeout=settings.db_connect_timeout_seconds,
+                    connect_timeout=settings.db_backup_db_connect_timeout_seconds,
                     lock_wait_timeout=settings.db_lock_wait_timeout_seconds,
                 )
                 size = target.stat().st_size

@@ -466,7 +466,7 @@ def test_a_missing_source_service_or_volume_fails_that_database_only() -> None:
 
 
 def test_out_of_time_skips_what_is_left() -> None:
-    report, exc = _drill_all(Api(), Conn(), Conn(), run_timeout_seconds=0)
+    report, exc = _drill_all(Api(), Conn(), Conn(), db_drill_run_timeout_seconds=0)
 
     assert report.issues["out_of_time"] == 2 and isinstance(exc, DrillError)
 
@@ -579,15 +579,20 @@ def test_both_layers_are_drilled_and_every_run_reports(
         return reports[-1]
 
     dump_calls: list[Settings] = []
+    deadlines: list[float] = []
 
-    def _drill_all(api: Any, settings: Settings, report: Any, run_id: str) -> Any:
+    def _drill_all(
+        api: Any, settings: Settings, report: Any, run_id: str, *, deadline: float
+    ) -> Any:
         assert api._headers["Project-Access-Token"] == "tok"
+        deadlines.append(deadline)
         if pitr_fails:
             raise DrillError("restore failed")
         return {"kaianolevine": {"rto_seconds": 120}}
 
-    def _dump_drill_all(settings: Settings, report: Any) -> Any:
+    def _dump_drill_all(settings: Settings, report: Any, *, deadline: float) -> Any:
         dump_calls.append(settings)
+        deadlines.append(deadline)
         if dump_fails:
             raise DrillError("pg_restore exited 1")
         return {"kaianolevine": {"age_hours": 0.5}}
@@ -610,3 +615,16 @@ def test_both_layers_are_drilled_and_every_run_reports(
     # out either way.
     assert len(dump_calls) == 1
     assert reports[0].sent == [True]
+    # Both layers share one deadline, set when the run started.
+    assert len(deadlines) == 2 and deadlines[0] == deadlines[1]
+
+
+def test_the_source_services_are_constants_not_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DB_DRILL_SOURCE_SERVICE_KAIANOLEVINE", "Renamed")
+
+    settings = _settings()
+
+    assert settings.databases["kaianolevine"][0] == "Postgres"
+    assert settings.databases["deejaytools"][0] == "Postgres-deejaytools"
