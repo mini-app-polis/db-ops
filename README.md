@@ -383,3 +383,5 @@ Versioning is semantic-release from conventional commits.
 ## Configuration
 
 See [`.env.example`](.env.example) for every variable the code reads.
+Production sets only the connection strings, keys and tokens; every budget
+and timeout runs on its code default.
