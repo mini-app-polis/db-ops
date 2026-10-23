@@ -33,10 +33,11 @@ monthly/<database>/<UTC timestamp>.dump    on the 1st
 
 The bucket, its versioning, its Object Lock and how long each prefix is kept
 are declared in mini-app-polis/infra. The lock means not even the writer's
-key can delete or overwrite a fresh dump. db-backup's key
-(`db-backup-writer`) can only `PutObject` under `daily/` and `monthly/`: a
-leaked key can add dumps but cannot read, list or delete one. db-drill reads
-with a separate key (`db-backup-reader`: `GetObject` and `ListBucket` only).
+key can delete or overwrite a fresh dump. db-backup's key can only
+`PutObject` under `daily/` and `monthly/`: a leaked key can add dumps but
+cannot read, list or delete one. db-drill reads with a separate key
+(`GetObject` and `ListBucket` only). Both keys are declared in
+mini-app-polis/infra.
 The lock is governance rather than compliance mode, so that a deejaytools
 user's erasure request can still reach the backups.
 
@@ -284,7 +285,7 @@ after the first rehearsal or real use.
 ### From the nightly dump
 
 1. Find and download the dump, with an AWS profile that can read the bucket
-   (the admin profile, or the `db-backup-reader` key):
+   (the admin profile, or db-drill's read-only key):
    ```bash
    aws s3 ls "s3://$DB_BACKUP_BUCKET/daily/deejaytools/"
    aws s3 cp "s3://$DB_BACKUP_BUCKET/daily/deejaytools/<stamp>.dump" .

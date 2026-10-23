@@ -144,7 +144,7 @@ class Settings(BaseSettings):
 
     # -- the S3 dump drill --
     #: The off-platform backup bucket, and the read-only key for it
-    #: (mini-app-polis/infra database_backups.tf, db-backup-reader).
+    #: (declared in mini-app-polis/infra).
     db_backup_bucket: str
     db_drill_aws_access_key_id: SecretStr
     db_drill_aws_secret_access_key: SecretStr
