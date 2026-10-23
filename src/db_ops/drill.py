@@ -77,6 +77,17 @@ SOURCE_SERVICES = {
     "deejaytools": "Postgres-deejaytools",
 }
 
+#: Between polls of Railway while a fork appears, restores or is deleted.
+POLL_INTERVAL_SECONDS = 15
+#: Between the canary and the fence; the restore target falls between.
+FENCE_GAP_SECONDS = 2
+#: A source table with at least this many rows must not be empty in the
+#: fork. A smaller one may have been empty at the target.
+KEY_TABLE_MIN_ROWS = 100
+#: A drill-* service older than this was not torn down. A whole run takes
+#: about fifteen minutes.
+STALE_FORK_SECONDS = 1800
+
 LOG = log.get_logger()
 
 Sleep = Callable[[float], None]
@@ -128,17 +139,8 @@ class Settings(BaseSettings):
     restore_timeout_seconds: float = 1800
     #: How long to wait for Railway to create, or confirm deleting, a fork.
     teardown_wait_seconds: float = 300
-    poll_interval_seconds: float = 15
-    #: Between the canary and the fence; the restore target falls between.
-    fence_gap_seconds: float = 2
     db_drill_db_connect_timeout_seconds: int = 10
     db_drill_db_statement_timeout_ms: int = 60_000
-    #: A source table with at least this many rows must not be empty in the
-    #: fork. A smaller one may have been empty at the target.
-    key_table_min_rows: int = 100
-    #: A drill-* service older than this was not torn down. A whole run
-    #: takes about fifteen minutes.
-    stale_fork_seconds: float = 1800
 
     # -- the S3 dump drill --
     #: The off-platform backup bucket, and the read-only key for it
@@ -234,7 +236,7 @@ def mark(conn: Any, run_id: str, settings: Settings, *, sleep: Sleep) -> Mark:
     )
     # Read after the canary has committed, so the canary is before this.
     canary_at = conn.execute("SELECT clock_timestamp()").fetchone()[0]
-    sleep(settings.fence_gap_seconds)
+    sleep(FENCE_GAP_SECONDS)
     conn.execute(
         "INSERT INTO ops.drill_canary (run_id, kind) VALUES (%s, 'fence') "
         "ON CONFLICT (run_id, kind) DO NOTHING",
@@ -336,7 +338,7 @@ def compare(
         result.tables += 1
         result.rows_source += source_rows
         result.rows_fork += copy_rows
-        if source_rows >= settings.key_table_min_rows and copy_rows == 0:
+        if source_rows >= KEY_TABLE_MIN_ROWS and copy_rows == 0:
             result.problems.append(
                 f"{schema}.{table} empty in the {label} ({source_rows} rows in source)"
             )
@@ -378,7 +380,7 @@ def wait_for_fork(
                 return domain
         if time.monotonic() >= deadline:
             raise DrillError(f"{name} did not appear within the restore budget")
-        sleep(settings.poll_interval_seconds)
+        sleep(POLL_INTERVAL_SECONDS)
 
 
 def wait_promoted(
@@ -412,7 +414,7 @@ def wait_promoted(
             conn.close()
         if time.monotonic() >= deadline:
             raise DrillError(f"the fork never finished recovery: {last_error}")
-        sleep(settings.poll_interval_seconds)
+        sleep(POLL_INTERVAL_SECONDS)
 
 
 def tear_down(api: RailwayApi, name: str, settings: Settings, *, sleep: Sleep) -> bool:
@@ -431,7 +433,7 @@ def tear_down(api: RailwayApi, name: str, settings: Settings, *, sleep: Sleep) -
     deadline = time.monotonic() + settings.teardown_wait_seconds
     found = api.find_service(name)
     while found is None and time.monotonic() < deadline:
-        sleep(settings.poll_interval_seconds)
+        sleep(POLL_INTERVAL_SECONDS)
         found = api.find_service(name)
     if found is None:
         return False
@@ -454,7 +456,7 @@ def tear_down(api: RailwayApi, name: str, settings: Settings, *, sleep: Sleep) -
         if time.monotonic() >= deadline:
             detail = f" (last error: {errors[-1]})" if errors else ""
             raise DrillError(f"still there after deletion: {', '.join(left)}{detail}")
-        sleep(settings.poll_interval_seconds)
+        sleep(POLL_INTERVAL_SECONDS)
 
 
 def _attempt(delete: Callable[[str], None], target: str, errors: list[str]) -> None:
@@ -483,7 +485,7 @@ def stale_forks(api: RailwayApi, now: datetime, settings: Settings) -> list[str]
     here = {s.service_id for s in services if s.name.startswith(FORK_PREFIX)}
     if not here:
         return []
-    cutoff = now - timedelta(seconds=settings.stale_fork_seconds)
+    cutoff = now - timedelta(seconds=STALE_FORK_SECONDS)
     return sorted(
         s.name
         for s in api.project_services()

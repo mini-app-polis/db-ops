@@ -47,6 +47,9 @@ export default defineRailway((ctx) => {
     },
   });
 
+  // No budget, timeout or _ENABLED switch is passed: production runs on
+  // the code defaults (.env.example lists them). A reference to a shared
+  // variable Doppler does not hold would arrive empty and fail validation.
   const common = [
     "AWS_REGION",
     "DB_OPS_API_KEY",
