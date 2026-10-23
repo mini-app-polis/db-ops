@@ -1,3 +1,16 @@
+## [1.5.25](https://github.com/mini-app-polis/db-ops/compare/v1.5.24...v1.5.25) (2026-10-23)
+
+
+### Bug Fixes
+
+* **config:** give each service its own timeout env names, bound the dump drill by the run deadline, keep the password off pg_dump's command line, and page Railway queries ([e151c24](https://github.com/mini-app-polis/db-ops/commit/e151c240ed2c51fdc312d47893aff6074dcbf83e))
+* **deps:** bump miniapppolis-common-utils to 6.18.0 ([f0607a8](https://github.com/mini-app-polis/db-ops/commit/f0607a8804ae3110e1deed6753865a986501be65))
+* **deps:** bump miniapppolis-common-utils to 6.19.0 ([9dd75b4](https://github.com/mini-app-polis/db-ops/commit/9dd75b4097f81cbd28641b58edeff382ee6f6aa3))
+* **deps:** bump miniapppolis-common-utils to 6.20.0 ([fd0c556](https://github.com/mini-app-polis/db-ops/commit/fd0c55655852cdd8845681f65be3e27f8b0890ba))
+* **deps:** bump miniapppolis-common-utils to 6.21.0 ([395b2d5](https://github.com/mini-app-polis/db-ops/commit/395b2d5f40fe9fd921040018cf5f6117ae8a7995))
+* **deps:** bump miniapppolis-common-utils to 6.22.0 ([d51adbe](https://github.com/mini-app-polis/db-ops/commit/d51adbed99901e1ca974571409752cea1f89555a))
+* **deps:** patch vulnerable dependencies (filelock) ([4bb0e09](https://github.com/mini-app-polis/db-ops/commit/4bb0e093c822d4ebe6fc60e27a8d040da0c49263))
+
 ## [1.5.24](https://github.com/mini-app-polis/db-ops/compare/v1.5.23...v1.5.24) (2026-10-23)
 
 
