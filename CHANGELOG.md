@@ -1,3 +1,11 @@
+## [1.5.27](https://github.com/mini-app-polis/db-ops/compare/v1.5.26...v1.5.27) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** patch virtualenv and bump miniapppolis-common-utils to 6.22.1 ([aaad314](https://github.com/mini-app-polis/db-ops/commit/aaad314325eda84e3d43df844456b6378c2fc04f))
+* **deps:** patch vulnerable dependencies (virtualenv) ([e80e6ca](https://github.com/mini-app-polis/db-ops/commit/e80e6cafec991dd828c6ef63de1d26baa042dbff))
+
 ## [1.5.26](https://github.com/mini-app-polis/db-ops/compare/v1.5.25...v1.5.26) (2026-10-23)
 
 
