@@ -1,3 +1,10 @@
+## [1.5.29](https://github.com/mini-app-polis/db-ops/compare/v1.5.28...v1.5.29) (2026-10-25)
+
+
+### Bug Fixes
+
+* **deps:** update psycopg[binary] requirement ([b3cc44f](https://github.com/mini-app-polis/db-ops/commit/b3cc44f59ef96ab9d57787675330434f19311d3c))
+
 ## [1.5.28](https://github.com/mini-app-polis/db-ops/compare/v1.5.27...v1.5.28) (2026-10-24)
 
 
