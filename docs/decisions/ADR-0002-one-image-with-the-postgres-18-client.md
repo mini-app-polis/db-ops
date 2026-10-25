@@ -1,4 +1,4 @@
-# ADR-002: One Image, With the PostgreSQL 18 Client
+# ADR-0002: One Image, With the PostgreSQL 18 Client
 
 **Date:** 2026-10-15
 **Status:** Accepted

@@ -18,7 +18,7 @@ All three are live.
 
 All three run from one image, built from the root `Dockerfile`, which brings
 the PostgreSQL 18 client tools (`pg_dump`, `pg_restore`) from the PostgreSQL
-apt repository — see [ADR-002](docs/decisions/ADR-002-one-image-with-the-postgres-18-client.md).
+apt repository — see [ADR-0002](docs/decisions/ADR-0002-one-image-with-the-postgres-18-client.md).
 
 ## db-backup
 
@@ -50,7 +50,7 @@ Each run is one wake: Railway starts the process on the service's cron
 schedule, it does its work, and it exits. Railway reports the run by exit
 code and skips a scheduled start while the previous one is still running, so
 a run that raises exits 1 and no run may hang. See
-[ADR-001](docs/decisions/ADR-001-one-repo-three-railway-crons.md) for why this
+[ADR-0001](docs/decisions/ADR-0001-one-repo-three-railway-crons.md) for why this
 is Railway rather than Lambda and one repository rather than three.
 
 ---
@@ -143,7 +143,7 @@ entry and only db-drill reads it. The code's default is still `project`, for
 the day Railway allows it.
 
 The cadence, and what would change it, is
-[ADR-003](docs/decisions/ADR-003-monthly-restore-drill.md).
+[ADR-0003](docs/decisions/ADR-0003-monthly-restore-drill.md).
 
 ### Running a drill by hand
 

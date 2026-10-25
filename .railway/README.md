@@ -14,4 +14,4 @@ labelled **`allow-destroy`**. Actions → Railway apply → Run workflow
 re-applies `main` by hand. Railway itself does not read this directory at
 deploy time.
 
-See the main README's Deployment section, and ADR-001.
+See the main README's Deployment section, and ADR-0001.
