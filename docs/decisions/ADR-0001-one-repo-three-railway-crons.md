@@ -1,4 +1,4 @@
-# ADR-001: One Repository, Three Railway Cron Services
+# ADR-0001: One Repository, Three Railway Cron Services
 
 **Date:** 2026-10-15
 **Status:** Accepted — amended 2026-10-16
@@ -51,10 +51,10 @@ metrics; each service gates its work on the environment.
 ## Consequences
 
 - Registered as `pipeline-cog` rather than a new repo type. That type now
-  means a queue-driven Lambda (ecosystem-standards ADR-009), so the rules
+  means a queue-driven Lambda (ecosystem-standards ADR-0009), so the rules
   that describe a queue, a dead-letter target or a Lambda function do not
   fit. They are recorded as deferrals in `evaluator.yaml` — one repository
-  is not enough to justify a new type (ecosystem-standards ADR-002). Once
+  is not enough to justify a new type (ecosystem-standards ADR-0002). Once
   wiki-curator-cog moves to Lambda, db-ops is the only Railway-hosted cog,
   and if a second repository of this shape appears, the type is what
   should change.

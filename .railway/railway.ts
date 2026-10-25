@@ -34,8 +34,8 @@ export default defineRailway((ctx) => {
     Object.fromEntries(names.map((name) => [name, ctx.shared[name]]));
 
   // Every service: one image, built from the root Dockerfile on main
-  // (ADR-002), one replica, run on its cron, never restarted — a failed
-  // run is retried by the next scheduled one (ADR-001).
+  // (ADR-0002), one replica, run on its cron, never restarted — a failed
+  // run is retried by the next scheduled one (ADR-0001).
   const cron = (module: string, cronSchedule: string) => ({
     source: github("mini-app-polis/db-ops", { branch: "main" }),
     build: { builder: "DOCKERFILE" as const, dockerfilePath: "Dockerfile" },

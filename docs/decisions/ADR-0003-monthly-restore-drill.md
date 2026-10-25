@@ -1,4 +1,4 @@
-# ADR-003: The Restore Drill Runs Monthly
+# ADR-0003: The Restore Drill Runs Monthly
 
 **Date:** 2026-10-16
 **Status:** Accepted

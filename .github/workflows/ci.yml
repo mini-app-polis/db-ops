@@ -27,7 +27,7 @@ jobs:
       pytest-args: "--cov=db_ops --cov-report=term-missing"
       # TEST-012: typechecked against [tool.mypy].
       typecheck: "uv run mypy src/"
-      # No terraform-dir: this repo owns no infrastructure (ADR-010).
+      # No terraform-dir: this repo owns no infrastructure (ecosystem-standards ADR-0010).
 
   release:
     name: Release

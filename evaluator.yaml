@@ -1,16 +1,16 @@
 # db-ops / evaluator.yaml
-# Per-repo evaluation configuration — ecosystem-standards ADR-001, ADR-002
+# Per-repo evaluation configuration — ecosystem-standards ADR-0001, ADR-0002
 
 type: pipeline-cog
 
-# ADR-009 defines `pipeline-cog` as a queue-driven Lambda worker declared in
+# ecosystem-standards ADR-0009 defines `pipeline-cog` as a queue-driven Lambda worker declared in
 # mini-app-polis/infra. db-ops is three Railway cron services with no queue
-# and no Lambda function — see docs/decisions/ADR-001-one-repo-three-railway-crons.md.
+# and no Lambda function — see docs/decisions/ADR-0001-one-repo-three-railway-crons.md.
 #
 # The queue- and Lambda-shaped rules below are exemptions, not deferrals:
 # they have no subject in a Railway cron repository, so there is nothing to
 # get round to. They are recorded per repo rather than as a new repo type,
-# because one repository is not enough to justify a type (ADR-002). Once
+# because one repository is not enough to justify a type (ecosystem-standards ADR-0002). Once
 # wiki-curator-cog moves to Lambda, db-ops is the only Railway-hosted cog. If
 # a second repository of this shape appears, the type is what should change,
 # and these come out.
@@ -23,14 +23,14 @@ exemptions:
       Requires a pipeline cog's work to arrive on a queue the API enqueues
       onto. Each db-ops service is started by its own Railway cron schedule;
       a run takes no arguments and works on both databases, so there is no
-      per-item message to enqueue. ADR-001.
+      per-item message to enqueue. ADR-0001.
 
   - rule: PIPE-016
     reason: >
       Requires a queue, a Lambda function and an event source mapping
       declared in mini-app-polis/infra. db-ops runs as Railway cron services
       so both databases are reached over private networking; there is no
-      function or queue to declare. ADR-001.
+      function or queue to declare. ADR-0001.
 
   - rule: PIPE-017
     reason: >
