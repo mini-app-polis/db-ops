@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/mini-app-polis/db-ops/compare/v1.5.35...v1.6.0) (2026-10-27)
+
+
+### Features
+
+* **railway:** keep the variables Doppler syncs to each cron itself ([f392720](https://github.com/mini-app-polis/db-ops/commit/f392720b7f99d7e0f613bbea3eced2db714b0271))
+
 ## [1.5.35](https://github.com/mini-app-polis/db-ops/compare/v1.5.34...v1.5.35) (2026-10-26)
 
 
