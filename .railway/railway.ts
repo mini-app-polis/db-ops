@@ -13,11 +13,13 @@
 // Production only. Planned against any other environment it declares
 // nothing, and a partial that owns nothing there changes nothing.
 //
-// Variables are references to the environment's shared variables, which
-// Doppler prd keeps current (`ctx.shared.NAME` is `${{shared.NAME}}`);
-// no value lives in this file.
+// Variables come from each cron's own Doppler config (the db-ops project's
+// prd_poller, prd_backup and prd_drill, each inheriting prd), synced to the
+// service itself; no value lives in this file. Each is declared with
+// preserve(), so an apply keeps what the sync wrote, and the next apply
+// would remove one left out.
 
-import { defineRailway, github, project, service } from "railway/iac";
+import { defineRailway, github, preserve, project, service } from "railway/iac";
 
 export const partial = "db-ops";
 
@@ -30,8 +32,13 @@ export default defineRailway((ctx) => {
     });
   }
 
-  const shared = (...names: string[]) =>
-    Object.fromEntries(names.map((name) => [name, ctx.shared[name]]));
+  // Doppler's own names ride along with every sync.
+  const fromDoppler = (...names: string[]) =>
+    Object.fromEntries(
+      [...names, "DOPPLER_CONFIG", "DOPPLER_ENVIRONMENT", "DOPPLER_PROJECT"].map(
+        (name) => [name, preserve()],
+      ),
+    );
 
   // Every service: one image, built from the root Dockerfile on main
   // (ADR-0002), one replica, run on its cron, never restarted — a failed
@@ -48,8 +55,8 @@ export default defineRailway((ctx) => {
   });
 
   // No budget, timeout or _ENABLED switch is passed: production runs on
-  // the code defaults (.env.example lists them). A reference to a shared
-  // variable Doppler does not hold would arrive empty and fail validation.
+  // the code defaults (.env.example lists them). A name declared here that
+  // its Doppler config does not hold would arrive empty and fail validation.
   const common = [
     "AWS_REGION",
     "DB_OPS_API_KEY",
@@ -63,7 +70,7 @@ export default defineRailway((ctx) => {
   const poller = service("db-poller", {
     ...cron("poller", "*/5 * * * *"),
     env: {
-      ...shared(
+      ...fromDoppler(
         ...common,
         "DB_POLLER_AWS_ACCESS_KEY_ID",
         "DB_POLLER_AWS_SECRET_ACCESS_KEY",
@@ -77,7 +84,7 @@ export default defineRailway((ctx) => {
   const backup = service("db-backup", {
     ...cron("backup", "17 9 * * *"),
     env: {
-      ...shared(
+      ...fromDoppler(
         ...common,
         "DB_BACKUP_AWS_ACCESS_KEY_ID",
         "DB_BACKUP_AWS_SECRET_ACCESS_KEY",
@@ -95,7 +102,7 @@ export default defineRailway((ctx) => {
   const drill = service("db-drill", {
     ...cron("drill", "43 9 2 * *"),
     env: {
-      ...shared(
+      ...fromDoppler(
         ...common,
         "DB_BACKUP_BUCKET",
         "DB_DRILL_AWS_ACCESS_KEY_ID",
