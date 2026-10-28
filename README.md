@@ -305,7 +305,7 @@ after the first rehearsal or real use.
 
 ## Running locally
 
-Secrets come from Doppler's shared `dev` config through the
+Secrets come from this repo's own Doppler `dev` config through the
 [Doppler CLI](https://docs.doppler.com/docs/install-cli) — nothing reads a
 `.env` file, and local runs never use `prd`.
 
