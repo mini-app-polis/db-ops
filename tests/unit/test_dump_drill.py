@@ -201,7 +201,7 @@ def test_a_failed_restore_fails_that_database_and_cleans_up(tmp_path: Path) -> N
     [
         # Taken last night; a migration applied since is fine.
         (Conn(migrations=["001.sql"]), True),
-        (Conn(migrations=["001.sql", "999_unknown.sql"]), False),
+        (Conn(migrations=["001.sql", "999.sql"]), False),
         (Conn(migrations=[]), False),
         (Conn(tables={"sets": 0, "plays": 3}), False),
         (Conn(tables={"plays": 3}), False),
