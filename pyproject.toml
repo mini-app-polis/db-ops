@@ -5,7 +5,7 @@ description = "Postgres operations for the ecosystem's production databases: met
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "miniapppolis-common-utils>=6.6.0,<7",  # init_sentry (CD-038)
+    "miniapppolis-common-utils>=7.0.0,<8",  # init_sentry (CD-038)
     "sentry-sdk>=2.0.0,<3.0.0",
     # 1.36 is the first release that sends a checksum on every upload by
     # default; the backup bucket has Object Lock, which requires one.
