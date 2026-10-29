@@ -62,9 +62,16 @@ jobs:
             @semantic-release/github \
             @semantic-release/release-notes-generator
 
+      # The release commit is authored as Kaiano rather than
+      # semantic-release-bot: Railway holds a deploy for approval when the
+      # commit's author isn't on the Railway team, and a bot can't be invited.
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: Kaiano Levine
+          GIT_AUTHOR_EMAIL: kaiano.levine@gmail.com
+          GIT_COMMITTER_NAME: Kaiano Levine
+          GIT_COMMITTER_EMAIL: kaiano.levine@gmail.com
         run: npx semantic-release
 
   # Conformance is graded when the repository changes, and this is where
