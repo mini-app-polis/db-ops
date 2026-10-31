@@ -1,3 +1,11 @@
+## [1.6.6](https://github.com/mini-app-polis/db-ops/compare/v1.6.5...v1.6.6) (2026-10-31)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.7.0 ([55a347b](https://github.com/mini-app-polis/db-ops/commit/55a347b50cd114b67ee439e2834e29a5152c3ebc))
+* **deps:** patch vulnerable dependencies (pyasn1) ([88bb682](https://github.com/mini-app-polis/db-ops/commit/88bb6822f632bf2b165d4157d4344e981bb13202))
+
 ## [1.6.5](https://github.com/mini-app-polis/db-ops/compare/v1.6.4...v1.6.5) (2026-10-30)
 
 
