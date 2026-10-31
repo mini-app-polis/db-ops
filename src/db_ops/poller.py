@@ -43,7 +43,7 @@ import boto3
 import psycopg
 from botocore.config import Config
 from mini_app_polis import logger as log
-from mini_app_polis.environment import Effect, effect_enabled
+from mini_app_polis.environment import Effect, effect_enabled, log_settings
 from mini_app_polis.pipeline_status import RunReport
 from pydantic import SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -294,6 +294,8 @@ def work(run_id: str) -> dict[str, Any]:
         return {"service": SERVICE, "skipped": True}
 
     settings = Settings.from_env()
+    # One line per setting; values only for names in SETTINGS_ALLOWLIST.
+    log_settings(settings)
     report = RunReport(flow_name=SERVICE, repo=REPO, run_id=run_id)
     try:
         published = poll(settings, report, datetime.now(UTC))

@@ -64,6 +64,7 @@ export default defineRailway((ctx) => {
     "KAIANO_API_BASE_URL",
     "LOGGING_LEVEL",
     "SENTRY_DSN_COGS",
+    "SETTINGS_ALLOWLIST",
   ];
 
   // Every 5 minutes.
