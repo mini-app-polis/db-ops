@@ -628,3 +628,36 @@ def test_the_source_services_are_constants_not_settings(
 
     assert settings.databases["kaianolevine"][0] == "Postgres"
     assert settings.databases["deejaytools"][0] == "Postgres-deejaytools"
+
+
+def test_a_run_logs_its_effective_settings_once_without_secret_values(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    url = "postgresql://user:not-for-logs@host/db"
+    monkeypatch.setenv("SETTINGS_ALLOWLIST", "AWS_REGION,DB_DRILL_RUN_TIMEOUT_SECONDS")
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    monkeypatch.delenv("DB_DRILL_RUN_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("DB_DRILL_DATABASE_URL_KAIANOLEVINE", url)
+    monkeypatch.setenv("DB_DRILL_DATABASE_URL_DEEJAYTOOLS", url)
+    monkeypatch.setenv("DB_DRILL_RAILWAY_TOKEN", "tok")
+    monkeypatch.setenv("RAILWAY_PROJECT_ID", "proj")
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT_ID", "env")
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "production")
+    monkeypatch.setenv("DB_BACKUP_BUCKET", "backups")
+    monkeypatch.setenv("DB_DRILL_AWS_ACCESS_KEY_ID", "AKIATEST")
+    monkeypatch.setenv("DB_DRILL_AWS_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("DB_DRILL_ENABLED", "true")
+    from db_ops import dump_drill
+
+    monkeypatch.setattr(drill, "RunReport", lambda **kwargs: FakeReport())
+    monkeypatch.setattr(drill, "drill_all", lambda *a, **k: {})
+    monkeypatch.setattr(dump_drill, "drill_all", lambda *a, **k: {})
+
+    with caplog.at_level("INFO"):
+        drill.work("run-1")
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages.count("AWS_REGION=eu-west-1 (set)") == 1
+    assert messages.count("DB_DRILL_RUN_TIMEOUT_SECONDS=5400.0 (default)") == 1
+    assert messages.count("DB_DRILL_DATABASE_URL_KAIANOLEVINE (set)") == 1
+    assert not any("not-for-logs" in message for message in messages)

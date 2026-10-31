@@ -37,7 +37,12 @@ import boto3
 import httpx
 import psycopg
 from mini_app_polis import logger as log
-from mini_app_polis.environment import Effect, effect_enabled, is_production
+from mini_app_polis.environment import (
+    Effect,
+    effect_enabled,
+    is_production,
+    log_settings,
+)
 from mini_app_polis.pipeline_status import RunReport
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import SecretStr, ValidationError
@@ -297,6 +302,8 @@ def work(run_id: str) -> dict[str, Any]:
         return {"service": SERVICE, "skipped": True}
 
     settings = Settings.from_env()
+    # One line per setting; values only for names in SETTINGS_ALLOWLIST.
+    log_settings(settings)
     _ping(settings, "/start")
     report = RunReport(flow_name=SERVICE, repo=REPO, run_id=run_id)
     try:

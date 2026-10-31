@@ -425,3 +425,30 @@ def test_a_rejected_ping_is_logged_as_a_warning(
 
     assert "ping_rejected" in caplog.text
     assert "status=400" in caplog.text
+
+
+def test_a_run_logs_its_effective_settings_once_without_secret_values(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    url = "postgresql://user:not-for-logs@host/db"
+    monkeypatch.setenv("SETTINGS_ALLOWLIST", "AWS_REGION,DB_BACKUP_RUN_TIMEOUT_SECONDS")
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    monkeypatch.delenv("DB_BACKUP_RUN_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("DB_BACKUP_DATABASE_URL_KAIANOLEVINE", url)
+    monkeypatch.setenv("DB_BACKUP_DATABASE_URL_DEEJAYTOOLS", url)
+    monkeypatch.setenv("DB_BACKUP_BUCKET", "bucket")
+    monkeypatch.setenv("DB_BACKUP_AWS_ACCESS_KEY_ID", "AKIATEST")
+    monkeypatch.setenv("DB_BACKUP_AWS_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setattr(backup, "_enabled", lambda: True)
+    monkeypatch.setattr(backup, "_ping", lambda settings, suffix="": None)
+    monkeypatch.setattr(backup, "RunReport", lambda **kwargs: FakeReport())
+    monkeypatch.setattr(backup, "back_up", lambda *a, **k: [])
+
+    with caplog.at_level("INFO"):
+        backup.work("run-1")
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages.count("AWS_REGION=eu-west-1 (set)") == 1
+    assert messages.count("DB_BACKUP_RUN_TIMEOUT_SECONDS=1800.0 (default)") == 1
+    assert messages.count("DB_BACKUP_DATABASE_URL_KAIANOLEVINE (set)") == 1
+    assert not any("not-for-logs" in message for message in messages)
