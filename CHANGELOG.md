@@ -1,3 +1,15 @@
+# [1.7.0](https://github.com/mini-app-polis/db-ops/compare/v1.6.6...v1.7.0) (2026-10-31)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.8.0 ([19be2e4](https://github.com/mini-app-polis/db-ops/commit/19be2e4b1e3b0a102199249d59ea85a5703793c4))
+
+
+### Features
+
+* **settings:** log effective settings once per run in db-poller, db-backup and db-drill ([37cfb8a](https://github.com/mini-app-polis/db-ops/commit/37cfb8ad86844541e5845dc01031dae4bbe25bf4))
+
 ## [1.6.6](https://github.com/mini-app-polis/db-ops/compare/v1.6.5...v1.6.6) (2026-10-31)
 
 
