@@ -1,3 +1,10 @@
+## [1.7.5](https://github.com/mini-app-polis/db-ops/compare/v1.7.4...v1.7.5) (2026-11-02)
+
+
+### Bug Fixes
+
+* **drill:** run the monthly drill on the 3rd ([6a089eb](https://github.com/mini-app-polis/db-ops/commit/6a089eb368a2744c76fe9049c68be17dfd9d79e7))
+
 ## [1.7.4](https://github.com/mini-app-polis/db-ops/compare/v1.7.3...v1.7.4) (2026-11-02)
 
 
