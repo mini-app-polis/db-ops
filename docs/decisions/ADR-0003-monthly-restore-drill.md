@@ -48,3 +48,31 @@ rather than fifty-two.
   Postgres major upgrade, a change to db-drill itself.
 - Revisit the cadence, more often for a while, if a scheduled drill fails or
   its figures move outside the recovery record's ranges.
+
+## What a passing drill does not prove (2026-11-02)
+
+A PITR restore replays WAL forward from the source's last pgBackRest base
+backup (Railway takes a weekly full and a daily differential), and Railway's
+image sets `archive_timeout=60`, so each database archives a 16 MB segment a
+minute however little it writes. On 2026-11-02 a hand-run drill of
+deejaytools targeted 19:29 UTC, about twelve hours after its 07:41 base
+backup. The restored service's 5 GB volume filled with replayed WAL a few
+hours in (`No space left on device`, then `recovery ended before configured
+recovery target was reached`), and every restart replayed from the base
+backup and failed again. kaianolevine, drilled in the same run on the same
+volume size, passed. The image logs `sized wal-drop= MiB` with no value on
+the restored service, so the replay-sizing it attempts did not take effect.
+That has been reported to Railway.
+
+So a drill passes or fails partly on how long after the last base backup it
+targets:
+
+- The scheduled run, a couple of hours after the morning base backup, tests
+  restores early in the backup cycle only. A pass does not show that a
+  restore to a later point that day would succeed.
+- Until Railway's replay stops filling the volume, or the volume can hold a
+  day of WAL, a PITR restore to more than a few hours after the last base
+  backup is expected to fail. For those points the nightly S3 dump is the
+  recovery path, with its loss of up to a day of writes.
+- A failed hand-run drill should be read with its distance from the last
+  base backup in mind before it is treated as a broken restore path.
