@@ -75,7 +75,8 @@ So:
   replays the least. A pass does not show that a restore to a later point
   that day would succeed.
 - Until that is explained, treat a PITR restore to many hours after the last
-  base backup as uncertain, with the nightly S3 dump as the recovery path
-  for those points (losing up to a day of writes).
+  base backup as uncertain, with the S3 dump as the recovery path for
+  those points. db-backup was moved from nightly to every four hours the
+  same day, so that path loses at most four hours of writes.
 - A failed hand-run drill should be read with its distance from each base
   backup in mind before it is treated as a broken restore path.

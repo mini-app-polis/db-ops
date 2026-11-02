@@ -11,7 +11,7 @@ own start command so a failure in one can never hide in another:
 | Service | Start command | Job |
 |---|---|---|
 | `db-poller` | `python -m db_ops.poller` | Publishes both databases' metrics to CloudWatch, `MiniAppPolis/Postgres` |
-| `db-backup` | `python -m db_ops.backup` | Nightly `pg_dump -Fc` of both databases to S3 — the copy that is not on Railway |
+| `db-backup` | `python -m db_ops.backup` | `pg_dump -Fc` of both databases to S3 every four hours — the copy that is not on Railway |
 | `db-drill` | `python -m db_ops.drill` | Monthly: restores a point-in-time fork of each database and the latest S3 dump of each, verifies them, deletes them, and reports the measured RPO and RTO |
 
 All three are live.
@@ -22,13 +22,13 @@ apt repository — see [ADR-0002](docs/decisions/ADR-0002-one-image-with-the-pos
 
 ## db-backup
 
-Nightly at 09:17 UTC. For each database it runs `pg_dump --format=custom` as
+Every four hours, at 17 minutes past 00, 04, 08, 12, 16 and 20 UTC. For each database it runs `pg_dump --format=custom` as
 the `backup` role (`pg_read_all_data`, nothing else) over private networking
 and uploads the dump with the write-only key:
 
 ```
 daily/<database>/<UTC timestamp>.dump      every run
-monthly/<database>/<UTC timestamp>.dump    on the 1st
+monthly/<database>/<UTC timestamp>.dump    the first run on the 1st (00:17 UTC)
 ```
 
 The bucket, its versioning, its Object Lock and how long each prefix is kept
@@ -177,9 +177,9 @@ no third layer.
 | Database | Layer | RPO | RTO | Last successful drill |
 |---|---|---|---|---|
 | `kaianolevine` (`Postgres`) | Point-in-time recovery — Railway, pgBackRest → Railway bucket | **≤ 1 min** — measured 4–51 s | **≤ 3 min** — measured 136–160 s | 2026-10-15 21:32 UTC |
-| `kaianolevine` (`Postgres`) | Nightly `pg_dump` — S3, off Railway | **≤ 24 h** — the dump drilled was 2.3 h old | **seconds** to restore — measured 1 s for 9.9 MB | 2026-10-15 21:41 UTC |
+| `kaianolevine` (`Postgres`) | `pg_dump` every 4 h — S3, off Railway | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dump drilled was 2.3 h old | **seconds** to restore — measured 1 s for 9.9 MB | 2026-10-15 21:41 UTC |
 | `deejaytools` (`Postgres-deejaytools`) | Point-in-time recovery | **≤ 1 min** — measured 4–49 s | **≤ 3 min** — measured 119–128 s | 2026-10-15 21:37 UTC |
-| `deejaytools` (`Postgres-deejaytools`) | Nightly `pg_dump` | **≤ 24 h** — the dump drilled was 2.3 h old | **seconds** to restore — measured < 1 s for 217 KB | 2026-10-15 21:41 UTC |
+| `deejaytools` (`Postgres-deejaytools`) | `pg_dump` every 4 h | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dump drilled was 2.3 h old | **seconds** to restore — measured < 1 s for 217 KB | 2026-10-15 21:41 UTC |
 
 How to read it:
 
@@ -193,8 +193,9 @@ How to read it:
   does **not** include cutting the application over to the fork (swapping
   `DATABASE_URL`), which is manual and undrilled. Restore window: about four
   weeks (Railway keeps the last four weekly full backups).
-- **The nightly dump** is for when Railway itself is the problem. Its RPO is
-  the age of the newest dump, at most a day plus the run (09:17 UTC daily); a
+- **The S3 dump** is for when Railway itself is the problem, and for any
+  point-in-time restore that fails (ADR-0003). Its RPO is the age of the
+  newest dump, at most four hours plus the run; a
   newest dump older than 36 hours fails the drill. Its RTO above is the
   `pg_restore` into a scratch PostgreSQL 18 only — standing up a new
   database somewhere to restore into is not part of the drill and would
@@ -222,7 +223,7 @@ deejaytools holds real users' data. A row deleted from the live database is
 
 - point-in-time recovery: up to about **4–5 weeks** (the oldest retained
   weekly full backup and the WAL after it);
-- nightly dumps in S3: until the bucket's lifecycle expires them, plus the
+- dumps in S3: until the bucket's lifecycle expires them, plus the
   time an expired dump is kept as a noncurrent version. Both periods, for
   `daily/` and `monthly/`, are declared in mini-app-polis/infra.
 
@@ -245,7 +246,7 @@ after the first rehearsal or real use.
 - **Only some rows are needed back:** restore a PITR fork, copy the rows out,
   delete the fork. Production stays where it is.
 - **Railway has lost the database, its PITR bucket or the project:** the
-  nightly dump. Anything written since the newest dump (up to a day) is gone.
+  S3 dump. Anything written since the newest dump (up to four hours) is gone.
 
 ### From point-in-time recovery
 
@@ -282,7 +283,7 @@ after the first rehearsal or real use.
    old service and its bucket until the fork is verified and archiving, then
    decide whether to remove those variables. That has not been tested.
 
-### From the nightly dump
+### From the S3 dump
 
 1. Find and download the dump, with an AWS profile that can read the bucket
    (the admin profile, or db-drill's read-only key):
@@ -347,7 +348,7 @@ services and nothing else in the project:
 
 | Service | Start command | Cron (UTC) | Restart policy |
 |---|---|---|---|
-| `db-backup` | `python -m db_ops.backup` | `17 9 * * *` | Never |
+| `db-backup` | `python -m db_ops.backup` | `17 */4 * * *` | Never |
 | `db-poller` | `python -m db_ops.poller` | `*/5 * * * *` | Never |
 | `db-drill` | `python -m db_ops.drill` | `43 9 3 * *` | Never |
 

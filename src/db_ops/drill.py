@@ -37,7 +37,7 @@ have drilled and exits 0, unless ``DB_DRILL_ENABLED=true`` asks for a
 deliberate test — which still refuses a non-production Railway environment.
 
 Then the second layer, in :mod:`db_ops.dump_drill`: the latest
-nightly S3 dump of each database is restored into a throwaway Postgres
+scheduled S3 dump of each database is restored into a throwaway Postgres
 inside this container and checked the same way, minus the canary.
 
     python -m db_ops.drill
@@ -132,9 +132,10 @@ class Settings(BaseSettings):
     #: The whole run's budget, shared by both layers: two restores, one
     #: after the other, then the dump drill in what is left.
     db_drill_run_timeout_seconds: float = 5400
-    #: How long the fence's WAL segment may take to reach the archive. The
-    #: databases switch segments at least every 60 s (archive_timeout).
-    archive_wait_seconds: float = 300
+    #: How long the fence's WAL segment may take to reach the archive. A
+    #: database switches segments at least every archive_timeout (60 s by
+    #: Railway's default, up to 600 s where it has been raised), plus margin.
+    archive_wait_seconds: float = 900
     #: How long one fork may take to appear, restore and promote.
     restore_timeout_seconds: float = 1800
     #: How long to wait for Railway to create, or confirm deleting, a fork.

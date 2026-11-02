@@ -1,6 +1,6 @@
-"""db-drill, second layer — prove the nightly S3 dumps restore.
+"""db-drill, second layer — prove the scheduled S3 dumps restore.
 
-Point-in-time recovery lives on Railway; the nightly ``pg_dump`` in S3 is the
+Point-in-time recovery lives on Railway; the scheduled ``pg_dump`` in S3 is the
 copy for when Railway itself is the problem. This proves that copy
 is usable, in the same monthly run as the PITR drill, for each database:
 
@@ -188,7 +188,7 @@ def s3_client(settings: Settings) -> Any:
 
 
 def latest_dump(s3: Any, bucket: str, database: str) -> tuple[str, datetime]:
-    """The newest nightly dump of one database: its key and when it was written."""
+    """The newest scheduled dump of one database: its key and when it was written."""
     newest: tuple[str, datetime] | None = None
     pages = s3.get_paginator("list_objects_v2").paginate(
         Bucket=bucket, Prefix=f"daily/{database}/"
