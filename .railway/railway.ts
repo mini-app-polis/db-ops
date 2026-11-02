@@ -97,11 +97,11 @@ export default defineRailway((ctx) => {
     },
   });
 
-  // Monthly, 09:43 UTC on the 2nd. Never apply this
+  // Monthly, 09:43 UTC on the 3rd. Never apply this
   // file while a drill is running: a deploy stops the run before it can
   // tear its forks down (README).
   const drill = service("db-drill", {
-    ...cron("drill", "43 9 2 * *"),
+    ...cron("drill", "43 9 3 * *"),
     env: {
       ...fromDoppler(
         ...common,

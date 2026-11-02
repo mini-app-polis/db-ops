@@ -25,8 +25,8 @@ jobs:
     with:
       # Applying a change to db-drill redeploys it, which stops a drill run
       # before it can delete its forks (README). The drill runs at 09:43 UTC
-      # on the 2nd and takes about fifteen minutes.
-      blocked-window: "02 09-10"
-      blocked-window-reason: "db-drill may be running (09:43 UTC on the 2nd)"
+      # on the 3rd and takes about fifteen minutes.
+      blocked-window: "03 09-10"
+      blocked-window-reason: "db-drill may be running (09:43 UTC on the 3rd)"
     secrets:
       railway-token: ${{ secrets.RAILWAY_TOKEN }}

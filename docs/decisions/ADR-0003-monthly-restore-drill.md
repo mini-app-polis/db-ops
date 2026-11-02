@@ -34,7 +34,7 @@ minutes (README, db-poller).
 
 ## Decision
 
-**Monthly, at 09:43 UTC on the 2nd** (`43 9 2 * *`). Slow drift is caught
+**Monthly, at 09:43 UTC on the 3rd** (`43 9 3 * *`; moved from the 2nd on 2026-11-02). Slow drift is caught
 within a month, the recovery record's figures are never more than a month
 old, and the exposure and the apply blackout happen twelve times a year
 rather than fifty-two.
