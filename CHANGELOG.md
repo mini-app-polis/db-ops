@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/mini-app-polis/db-ops/compare/v1.7.2...v1.7.3) (2026-11-02)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.8.3 ([a1fb904](https://github.com/mini-app-polis/db-ops/commit/a1fb904d87477026bfd781b1c3c71dffab70f60a))
+
 ## [1.7.2](https://github.com/mini-app-polis/db-ops/compare/v1.7.1...v1.7.2) (2026-11-01)
 
 
