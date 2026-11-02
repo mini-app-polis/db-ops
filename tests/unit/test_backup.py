@@ -105,11 +105,18 @@ def test_an_ordinary_day_writes_only_a_daily_key() -> None:
     ]
 
 
-def test_the_first_of_the_month_also_writes_a_monthly_key() -> None:
-    now = datetime(2026, 11, 1, 9, 17, 3, tzinfo=UTC)
+def test_the_first_run_of_the_month_also_writes_a_monthly_key() -> None:
+    now = datetime(2026, 11, 1, 0, 17, 3, tzinfo=UTC)
     assert object_keys("kaianolevine", now) == [
-        "daily/kaianolevine/2026-11-01T091703Z.dump",
-        "monthly/kaianolevine/2026-11-01T091703Z.dump",
+        "daily/kaianolevine/2026-11-01T001703Z.dump",
+        "monthly/kaianolevine/2026-11-01T001703Z.dump",
+    ]
+
+
+def test_later_runs_on_the_first_write_only_a_daily_key() -> None:
+    now = datetime(2026, 11, 1, 4, 17, 3, tzinfo=UTC)
+    assert object_keys("kaianolevine", now) == [
+        "daily/kaianolevine/2026-11-01T041703Z.dump"
     ]
 
 

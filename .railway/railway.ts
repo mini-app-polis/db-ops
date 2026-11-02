@@ -81,9 +81,9 @@ export default defineRailway((ctx) => {
     },
   });
 
-  // Nightly at 09:17 UTC.
+  // Every four hours, at 17 past 00, 04, 08, 12, 16 and 20 UTC.
   const backup = service("db-backup", {
-    ...cron("backup", "17 9 * * *"),
+    ...cron("backup", "17 */4 * * *"),
     env: {
       ...fromDoppler(
         ...common,

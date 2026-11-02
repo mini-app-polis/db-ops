@@ -1,4 +1,4 @@
-"""db-backup — a nightly pg_dump of both production databases to S3.
+"""db-backup — a pg_dump of both production databases to S3 every four hours.
 
 The copy that does not live on Railway. Point-in-time recovery covers a bad
 migration or a dropped table, but its archive is a Railway bucket; this is
@@ -117,11 +117,16 @@ class Settings(BaseSettings):
             ) from None
 
 
+#: Hours between scheduled runs (.railway/railway.ts). The first run on the
+#: 1st is the one that also writes ``monthly/``.
+RUN_INTERVAL_HOURS = 4
+
+
 def object_keys(database: str, now: datetime) -> list[str]:
-    """Where one dump goes: always ``daily/``, and ``monthly/`` on the 1st."""
+    """Where one dump goes: ``daily/``, plus ``monthly/`` on the 1st's first run."""
     stamp = now.strftime("%Y-%m-%dT%H%M%SZ")
     keys = [f"daily/{database}/{stamp}.dump"]
-    if now.day == 1:
+    if now.day == 1 and now.hour < RUN_INTERVAL_HOURS:
         keys.append(f"monthly/{database}/{stamp}.dump")
     return keys
 
