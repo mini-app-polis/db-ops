@@ -83,7 +83,7 @@ gone quiet is caught; the others leave a silent database to it.
 
 ## db-drill
 
-Monthly, 09:43 UTC on the 2nd. For each database in turn, as the `drill`
+Monthly, 09:43 UTC on the 3rd. For each database in turn, as the `drill`
 role (`pg_read_all_data`, and owner of the `ops` schema):
 
 1. Writes a **canary** row to `ops.drill_canary`, reads the database clock,
@@ -161,7 +161,7 @@ outside production it logs that it would have and exits, and even with
 `DB_DRILL_ENABLED=true` it refuses any Railway environment but production.
 
 While a hand-run drill is going, **nothing protects it from a deploy**. The
-CI apply guard covers only the scheduled window (the 2nd, 09:00–10:59 UTC),
+CI apply guard covers only the scheduled window (the 3rd, 09:00–10:59 UTC),
 and `main` deploys db-drill on push, so do not merge into `main` (a
 commons-update bump included) until the run has finished. If one is cut
 short anyway, clean up as above: each leftover fork's volume first, then
@@ -212,7 +212,7 @@ How to read it:
   Run `e58b74bc` (21:32) is the first clean run of both layers, with
   teardown confirmed. The evidence is the run reports in the Discord runs
   channel.
-- The drill repeats monthly (09:43 UTC on the 2nd). When a run's figures
+- The drill repeats monthly (09:43 UTC on the 3rd). When a run's figures
   move outside the ranges above, update this table.
 
 ### Erasure and backups (deejaytools)
@@ -349,7 +349,7 @@ services and nothing else in the project:
 |---|---|---|---|
 | `db-backup` | `python -m db_ops.backup` | `17 9 * * *` | Never |
 | `db-poller` | `python -m db_ops.poller` | `*/5 * * * *` | Never |
-| `db-drill` | `python -m db_ops.drill` | `43 9 2 * *` | Never |
+| `db-drill` | `python -m db_ops.drill` | `43 9 3 * *` | Never |
 
 A cron run that fails is retried by the next scheduled run, not by a
 restart. `tests/integration/test_start_commands.py` proves each start
@@ -366,7 +366,7 @@ not read `.railway/` when it deploys. Both workflows call the fleet's shared
 ones in `mini-app-polis/.github`, which pin the CLI version.
 
 Read the plan before merging: a service missing from the file is
-deleted, if the pull request is labelled `allow-destroy`. The apply refuses to run on the 2nd between 09:00 and 10:59 UTC,
+deleted, if the pull request is labelled `allow-destroy`. The apply refuses to run on the 3rd between 09:00 and 10:59 UTC,
 because changing db-drill redeploys it, and a redeploy stops a running
 drill before its forks are torn down; re-run the job afterwards.
 
