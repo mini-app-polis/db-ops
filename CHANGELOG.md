@@ -1,3 +1,11 @@
+## [1.7.6](https://github.com/mini-app-polis/db-ops/compare/v1.7.5...v1.7.6) (2026-11-02)
+
+
+### Bug Fixes
+
+* **backup:** dump both databases every four hours ([e23dac4](https://github.com/mini-app-polis/db-ops/commit/e23dac408d74aed0507711033a87744a0e85c661))
+* **deps:** bump miniapppolis-common-utils to 7.9.1 ([3bb1c4c](https://github.com/mini-app-polis/db-ops/commit/3bb1c4c887c31b8799b94e4e7c98812677129199))
+
 ## [1.7.5](https://github.com/mini-app-polis/db-ops/compare/v1.7.4...v1.7.5) (2026-11-02)
 
 
