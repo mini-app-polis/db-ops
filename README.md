@@ -58,7 +58,7 @@ is Railway rather than Lambda and one repository rather than three.
 ## db-poller
 
 Every 5 minutes. For each database, as the `metrics` role (`pg_monitor`,
-nothing else) over private networking, it reads ten values and publishes
+nothing else) over private networking, it reads eleven values and publishes
 them in one `PutMetricData` under `MiniAppPolis/Postgres`, dimension
 `Database`:
 
@@ -71,6 +71,14 @@ them in one `PutMetricData` under `MiniAppPolis/Postgres`, dimension
 | `StatementCalls`, `StatementExecTime` | Count, Milliseconds | `pg_stat_statements` totals; mean = `DIFF(time)/DIFF(calls)` in CloudWatch |
 | `ArchiveFailedCount`, `ArchiveAge` | Count, Seconds | `pg_stat_archiver` (PITR's WAL archive) |
 | `WalDirSize` | Bytes | `pg_ls_waldir()` |
+| `ArchiveTimeoutDrift` | Count | 1 when `archive_timeout` (`pg_settings`) differs from the database's expected value, else 0 |
+
+`archive_timeout` is set by hand (`ALTER SYSTEM`) and nothing in code
+enforces it, so an image update or a restore can reset it unnoticed. The
+expected value for each database is `DB_POLLER_EXPECTED_ARCHIVE_TIMEOUT_<DATABASE>`,
+in seconds, defaulting to the value in `poller.Settings`. A drift is a
+WARNING log line every run and a note on the run report, not a WARN
+message every five minutes; the alarm on the metric is the alert.
 
 A database it cannot reach publishes nothing for itself, which is what its
 missing-data alarm watches for; a failed publish fails the run. Production

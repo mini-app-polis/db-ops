@@ -54,6 +54,12 @@ class FakeConn:
         return None
 
     def execute(self, query: str) -> FakeResult:
+        if query == poller.ARCHIVE_TIMEOUT_QUERY:
+            # Unset unless a test gives one, so ArchiveTimeoutDrift is left
+            # out: the tests below that count metrics count QUERIES.
+            if "archive_timeout" in self.fail:
+                raise psycopg.errors.InsufficientPrivilege("archive_timeout")
+            return FakeResult((self.values.get("archive_timeout"),))
         name = next(n for n, _, q in QUERIES if q == query)
         if name in self.fail:
             raise psycopg.errors.UndefinedTable(f"{name} unavailable")
@@ -138,6 +144,101 @@ def test_one_unreadable_metric_does_not_cost_the_rest() -> None:
 
     assert len(data) == len(QUERIES) - 2
     assert ("metric_unreadable", "kaianolevine/StatementCalls") in report.notes
+
+
+def _drift(data: list[dict[str, Any]]) -> list[float]:
+    return [d["Value"] for d in data if d["MetricName"] == "ArchiveTimeoutDrift"]
+
+
+def test_archive_timeout_at_its_expected_value_publishes_no_drift() -> None:
+    report = FakeReport()
+    data = poller.collect(
+        FakeConn({"archive_timeout": 600}),
+        "deejaytools",
+        NOW,
+        report,  # type: ignore[arg-type]
+        expected_archive_timeout=600,
+    )
+
+    assert _drift(data) == [0.0]
+    assert report.notes == [] and report.issues == []
+
+
+def test_archive_timeout_drift_publishes_one_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    report = FakeReport()
+    with caplog.at_level("WARNING"):
+        data = poller.collect(
+            FakeConn({"archive_timeout": 60}),
+            "deejaytools",
+            NOW,
+            report,  # type: ignore[arg-type]
+            expected_archive_timeout=600,
+        )
+
+    assert _drift(data) == [1.0]
+    drift = next(d for d in data if d["MetricName"] == "ArchiveTimeoutDrift")
+    assert drift["Dimensions"] == [{"Name": "Database", "Value": "deejaytools"}]
+    assert ("archive_timeout_drift", "deejaytools") in report.notes
+    assert any(
+        r.levelname == "WARNING"
+        and "archive_timeout_drift database=deejaytools actual=60 expected=600"
+        in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_an_unreadable_archive_timeout_does_not_cost_the_rest() -> None:
+    report = FakeReport()
+    data = poller.collect(
+        FakeConn({"archive_timeout": 60}, fail={"archive_timeout"}),
+        "kaianolevine",
+        NOW,
+        report,  # type: ignore[arg-type]
+        expected_archive_timeout=60,
+    )
+
+    assert _drift(data) == []
+    assert len(data) == len(QUERIES)
+    assert ("metric_unreadable", "kaianolevine/ArchiveTimeoutDrift") in report.notes
+
+
+def test_without_an_expected_value_archive_timeout_is_not_checked() -> None:
+    data = poller.collect(FakeConn(), "kaianolevine", NOW, FakeReport())  # type: ignore[arg-type]
+    assert _drift(data) == []
+
+
+def test_each_database_is_checked_against_its_own_expected_value(
+    cloudwatch: FakeCloudWatch,
+) -> None:
+    def connect(url: str, settings: Settings) -> FakeConn:
+        # kaianolevine at its value; deejaytools still at Railway's default.
+        return FakeConn({"archive_timeout": 60})
+
+    report = FakeReport()
+    poller.poll(
+        _settings(
+            db_poller_expected_archive_timeout_kaianolevine=60,
+            db_poller_expected_archive_timeout_deejaytools=600,
+        ),
+        report,  # type: ignore[arg-type]
+        NOW,
+        connect=connect,
+    )
+
+    drift = {
+        call["MetricData"][0]["Dimensions"][0]["Value"]: _drift(call["MetricData"])
+        for call in cloudwatch.calls
+    }
+    assert drift == {"kaianolevine": [0.0], "deejaytools": [1.0]}
+    assert report.notes == [("archive_timeout_drift", "deejaytools")]
+    assert report.issues == []
+
+
+def test_expected_archive_timeouts_cover_every_database() -> None:
+    settings = _settings()
+    assert settings.expected_archive_timeouts.keys() == settings.database_urls.keys()
 
 
 # ── Publishing ───────────────────────────────────────────────────────────
