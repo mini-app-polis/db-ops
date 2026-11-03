@@ -86,3 +86,10 @@ So:
   on 2026-11-03: 74 segments in 12 hours), so a day's replay is about a
   tenth the size. The cost is its PITR RPO: up to ten minutes instead of
   about one. `kaianolevine` stays at 60 s.
+- On 2026-11-03 a hand-run drill restored `deejaytools` to 19:02 UTC, 11.3
+  hours after its 07:42 base backup, and passed (RTO 103 s); the same case
+  at `archive_timeout=60` had failed twice the day before. Late-day PITR
+  restores of `deejaytools` are now expected to work. Why its restores keep
+  replayed WAL on disk while `kaianolevine`'s do not is still not known, so
+  a much busier `deejaytools` could reach the volume's limit again; the
+  drift alarm on `archive_timeout` and the four-hourly dump stay in place.

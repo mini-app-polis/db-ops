@@ -184,10 +184,10 @@ no third layer.
 
 | Database | Layer | RPO | RTO | Last successful drill |
 |---|---|---|---|---|
-| `kaianolevine` (`Postgres`) | Point-in-time recovery — Railway, pgBackRest → Railway bucket | **≤ 1 min** — measured 4–51 s | **≤ 3 min** — measured 136–160 s | 2026-10-15 21:32 UTC |
-| `kaianolevine` (`Postgres`) | `pg_dump` every 4 h — S3, off Railway | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dump drilled was 2.3 h old | **seconds** to restore — measured 1 s for 9.9 MB | 2026-10-15 21:41 UTC |
-| `deejaytools` (`Postgres-deejaytools`) | Point-in-time recovery | **≤ 10 min** (`archive_timeout=600` since 2026-11-02) — measured 4–49 s at `archive_timeout=60` | **≤ 3 min** — measured 119–128 s | 2026-10-15 21:37 UTC |
-| `deejaytools` (`Postgres-deejaytools`) | `pg_dump` every 4 h | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dump drilled was 2.3 h old | **seconds** to restore — measured < 1 s for 217 KB | 2026-10-15 21:41 UTC |
+| `kaianolevine` (`Postgres`) | Point-in-time recovery — Railway, pgBackRest → Railway bucket | **≤ 1 min** — measured 4–56 s | **≤ 6 min** — measured 91–314 s | 2026-11-03 19:09 UTC |
+| `kaianolevine` (`Postgres`) | `pg_dump` every 4 h — S3, off Railway | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dumps drilled were 1.6–2.9 h old | **seconds** to restore — measured 4–5 s for 67 MB | 2026-11-03 19:09 UTC |
+| `deejaytools` (`Postgres-deejaytools`) | Point-in-time recovery | **≤ 10 min** (`archive_timeout=600` since 2026-11-02) — measured 221–307 s | **≤ 3 min** — measured 70–103 s | 2026-11-03 19:09 UTC |
+| `deejaytools` (`Postgres-deejaytools`) | `pg_dump` every 4 h | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dumps drilled were 1.6–2.9 h old | **seconds** to restore — measured < 1 s for 309 KB | 2026-11-03 19:09 UTC |
 
 How to read it:
 
@@ -213,19 +213,20 @@ How to read it:
   `pg_restore` into a scratch PostgreSQL 18 only — standing up a new
   database somewhere to restore into is not part of the drill and would
   dominate a real recovery.
-- Every figure comes from these runs, all 2026-10-15 (UTC), all verified
-  against the live source (migrations, every table, no emptied tables):
+- The figures come from the two passing runs on 2026-11-03 (UTC), both
+  verified against the live source (migrations, every table, no emptied
+  tables), the first with `deejaytools` at `archive_timeout=600`:
 
   | Run | Version | PITR `kaianolevine` RPO / RTO | PITR `deejaytools` RPO / RTO | Dump layer |
   |---|---|---|---|---|
-  | 20:43 | 1.3.0 | 13 s / 160 s | 14 s / 128 s | — (not built yet) |
-  | 21:01 | 1.3.2 | 51 s / 136 s | 4 s / 119 s | — |
-  | 21:20 | 1.4.0 | 4 s / 154 s | cut short by a deploy | — |
-  | 21:32 | 1.4.1 | 24 s / 151 s | 49 s / 119 s | both pass, dumps 2.3 h old |
+  | 09:43 `976e1557` (scheduled) | 1.8.0 | 46 s / 91 s | 307 s / 70 s | both pass, dumps 1.6 h old |
+  | 18:55 `c136c26e` (by hand) | 1.8.0 | 56 s / 314 s | 221 s / 103 s | both pass, dumps 2.9 h old |
 
-  Run `e58b74bc` (21:32) is the first clean run of both layers, with
-  teardown confirmed. The evidence is the run reports in the Discord runs
-  channel.
+  The 18:55 run restored `deejaytools` to 19:02, 11.3 hours after its
+  07:42 base backup: the late-day case that failed on 2026-11-02
+  (ADR-0003). The 2026-10-15 runs, which first established the drill, are
+  in the Discord runs channel with these; RTO for `kaianolevine` was
+  136–160 s then and has measured up to 329 s since.
 - The drill repeats monthly (09:43 UTC on the 3rd). When a run's figures
   move outside the ranges above, update this table.
 
