@@ -65,7 +65,7 @@ recovery target was reached`), and every restart replayed from the base
 backup and failed again. The image logs `sized wal-drop= MiB` with no value
 on the restored service, so the replay sizing it attempts did not take
 effect there. Why one replay kept its WAL and the other did not is not
-known; it is with Railway.
+known.
 
 So:
 
