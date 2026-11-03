@@ -186,7 +186,7 @@ no third layer.
 |---|---|---|---|---|
 | `kaianolevine` (`Postgres`) | Point-in-time recovery — Railway, pgBackRest → Railway bucket | **≤ 1 min** — measured 4–51 s | **≤ 3 min** — measured 136–160 s | 2026-10-15 21:32 UTC |
 | `kaianolevine` (`Postgres`) | `pg_dump` every 4 h — S3, off Railway | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dump drilled was 2.3 h old | **seconds** to restore — measured 1 s for 9.9 MB | 2026-10-15 21:41 UTC |
-| `deejaytools` (`Postgres-deejaytools`) | Point-in-time recovery | **≤ 1 min** — measured 4–49 s | **≤ 3 min** — measured 119–128 s | 2026-10-15 21:37 UTC |
+| `deejaytools` (`Postgres-deejaytools`) | Point-in-time recovery | **≤ 10 min** (`archive_timeout=600` since 2026-11-02) — measured 4–49 s at `archive_timeout=60` | **≤ 3 min** — measured 119–128 s | 2026-10-15 21:37 UTC |
 | `deejaytools` (`Postgres-deejaytools`) | `pg_dump` every 4 h | **≤ 4 h** (≤ 24 h until 2026-11-02) — the dump drilled was 2.3 h old | **seconds** to restore — measured < 1 s for 217 KB | 2026-10-15 21:41 UTC |
 
 How to read it:
@@ -196,7 +196,12 @@ How to read it:
   script. RPO is how far the WAL archive trails the database: the drill
   writes a canary, measures until its WAL segment is archived, restores to
   one second after it, and checks the canary is there and the next row is
-  not. `archive_timeout=60` bounds it at about a minute. RTO is from asking
+  not. `archive_timeout` bounds it: 60 s for `kaianolevine`, so about a
+  minute; 600 s for `deejaytools` since 2026-11-02, so a write in a quiet
+  period can take up to ten minutes to reach the archive. Both are set by
+  hand (`ALTER SYSTEM`, held in the database's `postgresql.auto.conf`), not
+  by Railway's image or by code, and `ArchiveTimeoutDrift` watches them.
+  RTO is from asking
   Railway for the restore to the fork answering as a promoted primary; it
   does **not** include cutting the application over to the fork (swapping
   `DATABASE_URL`), which is manual and undrilled. Restore window: about four
