@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/mini-app-polis/db-ops/compare/v1.7.6...v1.8.0) (2026-11-03)
+
+
+### Features
+
+* **poller:** publish ArchiveTimeoutDrift when a database's archive_timeout differs from its expected value ([dab3569](https://github.com/mini-app-polis/db-ops/commit/dab3569c7e69aa7e4b383f1368827851b089a699))
+
 ## [1.7.6](https://github.com/mini-app-polis/db-ops/compare/v1.7.5...v1.7.6) (2026-11-02)
 
 
