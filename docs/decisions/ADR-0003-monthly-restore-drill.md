@@ -34,10 +34,12 @@ minutes (README, db-poller).
 
 ## Decision
 
-**Monthly, at 09:43 UTC on the 3rd** (`43 9 3 * *`; moved from the 2nd on 2026-11-02). Slow drift is caught
+**Monthly, at 09:43 UTC on the 3rd** (`43 9 3 * *`). Slow drift is caught
 within a month, the recovery record's figures are never more than a month
 old, and the exposure and the apply blackout happen twelve times a year
 rather than fifty-two.
+
+The run moved from the 2nd to the 3rd of the month on 2026-11-02.
 
 ## Consequences
 
@@ -49,37 +51,31 @@ rather than fifty-two.
 - Revisit the cadence, more often for a while, if a scheduled drill fails or
   its figures move outside the recovery record's ranges.
 
-## What a passing drill does not prove (2026-11-02)
+## What a passing drill does not prove
+
+Added 2026-11-02, updated 2026-11-03.
 
 A PITR restore replays WAL forward from the source's last pgBackRest base
 backup (Railway takes a weekly full and a daily differential, at a time of
 day set per database), and Railway's image sets `archive_timeout=60`, so
 each database archives a 16 MB segment a minute however little it writes.
 
+### What happened
+
 On 2026-11-02 a hand-run drill restored both databases to about 19:25 UTC.
-kaianolevine replayed about ten hours of WAL (some 9 GB) from its 09:36
-base backup and passed. deejaytools, twelve hours past its 07:41 base
+`kaianolevine` replayed about ten hours of WAL (some 9 GB) from its 09:36
+base backup and passed. `deejaytools`, twelve hours past its 07:41 base
 backup, filled its restored service's 5 GB volume after replaying about
 4.5 GB (`No space left on device`, then `recovery ended before configured
 recovery target was reached`), and every restart replayed from the base
 backup and failed again. The image logs `sized wal-drop= MiB` with no value
 on the restored service, so the replay sizing it attempts did not take
-effect there. Why one replay kept its WAL and the other did not is not
-known.
+effect there.
 
-So:
+### What changed
 
-- A restore's WAL replay grows with the time since the source's last base
-  backup, and on a 5 GB volume a replay of a few GB has been seen to fail.
-  The scheduled run, a couple of hours after each database's base backup,
-  replays the least. A pass does not show that a restore to a later point
-  that day would succeed.
-- Until that is explained, treat a PITR restore to many hours after the last
-  base backup as uncertain, with the S3 dump as the recovery path for
-  those points. db-backup was moved from nightly to every four hours the
-  same day, so that path loses at most four hours of writes.
-- A failed hand-run drill should be read with its distance from each base
-  backup in mind before it is treated as a broken restore path.
+- db-backup moved from nightly to every four hours the same day, so the S3
+  dump loses at most four hours of writes.
 - On 2026-11-02 at 21:47 UTC `deejaytools`' `archive_timeout` was raised
   from 60 to 600 s by hand (`ALTER SYSTEM`, held in `postgresql.auto.conf`),
   cutting its idle WAL from about 60 segments an hour to about 6 (measured
@@ -87,9 +83,20 @@ So:
   tenth the size. The cost is its PITR RPO: up to ten minutes instead of
   about one. `kaianolevine` stays at 60 s.
 - On 2026-11-03 a hand-run drill restored `deejaytools` to 19:02 UTC, 11.3
-  hours after its 07:42 base backup, and passed (RTO 103 s); the same case
-  at `archive_timeout=60` had failed twice the day before. Late-day PITR
-  restores of `deejaytools` are now expected to work. Why its restores keep
-  replayed WAL on disk while `kaianolevine`'s do not is still not known, so
-  a much busier `deejaytools` could reach the volume's limit again; the
-  drift alarm on `archive_timeout` and the four-hourly dump stay in place.
+  hours after its 07:42 base backup, and passed (RTO 103 s). The same case
+  at `archive_timeout=60` had failed twice the day before.
+
+### What still holds
+
+- A restore's WAL replay grows with the time since the source's last base
+  backup. The scheduled run, a couple of hours after each database's base
+  backup, replays the least, so a scheduled pass does not by itself show
+  that a restore to a later point that day would succeed.
+- Late-day PITR restores of `deejaytools` are now expected to work. Why its
+  restores keep replayed WAL on disk while `kaianolevine`'s do not is still
+  not known, so a much busier `deejaytools` could reach the volume's limit
+  again. The drift alarm on `archive_timeout` and the four-hourly dump stay
+  in place, and the S3 dump is the recovery path for any point a PITR
+  restore cannot reach.
+- Read a failed hand-run drill with its distance from each base backup in
+  mind before treating it as a broken restore path.
