@@ -15,6 +15,11 @@ Every five minutes (Railway's shortest cron interval), for each database in
   health of point-in-time recovery's WAL archive. A stalled archive
   spools WAL on the database's own volume; without these, PITR coverage is
   lost silently and found out at restore time.
+* ``ArchiveTimeoutDrift`` — 1 when the database's ``archive_timeout`` differs
+  from the value configured for it (:attr:`Settings.expected_archive_timeouts`),
+  else 0. Nothing in code sets ``archive_timeout``; an image update or a
+  restore can put it back to the default unnoticed, and it decides both how
+  far PITR trails the database and how much WAL a restore must replay.
 
 Published under ``MiniAppPolis/Postgres`` with a ``Database`` dimension, one
 ``PutMetricData`` per database. A database that cannot be reached publishes
@@ -83,12 +88,25 @@ class Settings(BaseSettings):
     db_poller_db_statement_timeout_ms: int = 5000
     cloudwatch_timeout_seconds: int = 10
 
+    #: Each database's intended archive_timeout, in seconds, as pg_settings
+    #: reports it. A difference publishes ArchiveTimeoutDrift=1.
+    db_poller_expected_archive_timeout_kaianolevine: int = 60
+    db_poller_expected_archive_timeout_deejaytools: int = 600
+
     @property
     def database_urls(self) -> dict[str, str]:
         """Database name in the Database dimension -> its connection string."""
         return {
             "kaianolevine": self.db_poller_database_url_kaianolevine.get_secret_value(),
             "deejaytools": self.db_poller_database_url_deejaytools.get_secret_value(),
+        }
+
+    @property
+    def expected_archive_timeouts(self) -> dict[str, int]:
+        """Database name in the Database dimension -> its archive_timeout."""
+        return {
+            "kaianolevine": self.db_poller_expected_archive_timeout_kaianolevine,
+            "deejaytools": self.db_poller_expected_archive_timeout_deejaytools,
         }
 
     @classmethod
@@ -164,8 +182,67 @@ QUERIES: list[tuple[str, str, str]] = [
 ]
 
 
+#: archive_timeout in seconds; pg_settings reports it in its unit, ``s``.
+ARCHIVE_TIMEOUT_QUERY = (
+    "SELECT setting::int FROM pg_settings WHERE name = 'archive_timeout'"
+)
+
+
+def _metric(
+    name: str, unit: str, database: str, now: datetime, value: Any
+) -> dict[str, Any]:
+    return {
+        "MetricName": name,
+        "Dimensions": [{"Name": "Database", "Value": database}],
+        "Timestamp": now,
+        "Value": float(value),
+        "Unit": unit,
+    }
+
+
+def archive_timeout_drift(
+    conn: Connection, database: str, expected: int, now: datetime, report: RunReport
+) -> dict[str, Any] | None:
+    """ArchiveTimeoutDrift for one database, or None if it cannot be read.
+
+    A drift is logged at WARNING and noted, not raised as an issue: the
+    setting stays wrong until a person changes it, so an issue would send a
+    WARN message every five minutes. The alarm on the metric is the alert.
+    """
+    try:
+        row = conn.execute(ARCHIVE_TIMEOUT_QUERY).fetchone()
+    except psycopg.Error as exc:
+        LOG.warning(
+            "%s.metric_failed database=%s metric=ArchiveTimeoutDrift err=%s",
+            SERVICE,
+            database,
+            str(exc).strip()[:200],
+        )
+        report.note("metric_unreadable", f"{database}/ArchiveTimeoutDrift")
+        return None
+    actual = row[0] if row else None
+    if actual is None:
+        return None
+    drifted = int(actual) != expected
+    if drifted:
+        LOG.warning(
+            "%s.archive_timeout_drift database=%s actual=%s expected=%s",
+            SERVICE,
+            database,
+            actual,
+            expected,
+        )
+        report.note("archive_timeout_drift", database)
+    return _metric("ArchiveTimeoutDrift", "Count", database, now, int(drifted))
+
+
 def collect(
-    conn: Connection, database: str, now: datetime, report: RunReport
+    conn: Connection,
+    database: str,
+    now: datetime,
+    report: RunReport,
+    *,
+    expected_archive_timeout: int | None = None,
 ) -> list[dict[str, Any]]:
     """Read every metric for one database. A metric that fails is skipped."""
     data: list[dict[str, Any]] = []
@@ -188,15 +265,13 @@ def collect(
         value = row[0] if row else None
         if value is None:
             continue
-        data.append(
-            {
-                "MetricName": name,
-                "Dimensions": [{"Name": "Database", "Value": database}],
-                "Timestamp": now,
-                "Value": float(value),
-                "Unit": unit,
-            }
+        data.append(_metric(name, unit, database, now, value))
+    if expected_archive_timeout is not None:
+        drift = archive_timeout_drift(
+            conn, database, expected_archive_timeout, now, report
         )
+        if drift is not None:
+            data.append(drift)
     return data
 
 
@@ -244,6 +319,7 @@ def poll(
     client = _cloudwatch_client(settings)
     published: dict[str, int] = {}
     failed: list[str] = []
+    expected_archive_timeouts = settings.expected_archive_timeouts
 
     for database, url in settings.database_urls.items():
         if time.monotonic() >= deadline:
@@ -252,7 +328,13 @@ def poll(
             continue
         try:
             with connect(url, settings) as conn:
-                data = collect(conn, database, now, report)
+                data = collect(
+                    conn,
+                    database,
+                    now,
+                    report,
+                    expected_archive_timeout=expected_archive_timeouts.get(database),
+                )
         except (psycopg.Error, OSError) as exc:
             # Publish nothing for it: the absence is what the unreachable
             # alarm fires on. A note rather than an issue, so a database that is
