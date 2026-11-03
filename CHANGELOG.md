@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/mini-app-polis/db-ops/compare/v1.8.0...v1.8.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group with 2 updates ([a5b3065](https://github.com/mini-app-polis/db-ops/commit/a5b3065b39d587aaddc654f0a47e819d47cb9d37))
+
 # [1.8.0](https://github.com/mini-app-polis/db-ops/compare/v1.7.6...v1.8.0) (2026-11-03)
 
 
