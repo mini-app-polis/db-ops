@@ -80,3 +80,9 @@ So:
   same day, so that path loses at most four hours of writes.
 - A failed hand-run drill should be read with its distance from each base
   backup in mind before it is treated as a broken restore path.
+- On 2026-11-02 at 21:47 UTC `deejaytools`' `archive_timeout` was raised
+  from 60 to 600 s by hand (`ALTER SYSTEM`, held in `postgresql.auto.conf`),
+  cutting its idle WAL from about 60 segments an hour to about 6 (measured
+  on 2026-11-03: 74 segments in 12 hours), so a day's replay is about a
+  tenth the size. The cost is its PITR RPO: up to ten minutes instead of
+  about one. `kaianolevine` stays at 60 s.
