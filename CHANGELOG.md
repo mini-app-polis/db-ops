@@ -1,3 +1,11 @@
+## [1.9.2](https://github.com/mini-app-polis/db-ops/compare/v1.9.1...v1.9.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.19.0 ([567cd48](https://github.com/mini-app-polis/db-ops/commit/567cd486260b8c75338d0819944fa35a68f907e1))
+* **deps:** bump oauthlib to 4.0.1 and miniapppolis-common-utils to 7.20.0 ([ef2c9b1](https://github.com/mini-app-polis/db-ops/commit/ef2c9b18891c7cb108a78f2c6724a358896ec9e7))
+
 ## [1.9.1](https://github.com/mini-app-polis/db-ops/compare/v1.9.0...v1.9.1) (2026-11-05)
 
 
