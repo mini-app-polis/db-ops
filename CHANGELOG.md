@@ -1,3 +1,10 @@
+## [1.9.4](https://github.com/mini-app-polis/db-ops/compare/v1.9.3...v1.9.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.1.0 ([1ffb73f](https://github.com/mini-app-polis/db-ops/commit/1ffb73fa7e654eb3f3f8ea93b8f679861b21aa93))
+
 ## [1.9.3](https://github.com/mini-app-polis/db-ops/compare/v1.9.2...v1.9.3) (2026-11-06)
 
 
