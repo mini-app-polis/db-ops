@@ -1,3 +1,18 @@
+# [1.10.0](https://github.com/mini-app-polis/db-ops/compare/v1.9.5...v1.10.0) (2026-11-08)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.10.0 ([7aae4d2](https://github.com/mini-app-polis/db-ops/commit/7aae4d2516ee5c51ee9aa3817787af68686e7976))
+* **deps:** bump miniapppolis-common-utils to 8.10.1 ([88da95e](https://github.com/mini-app-polis/db-ops/commit/88da95e0af9ae767350d995fe650735f6f08ae3a))
+* **deps:** bump miniapppolis-common-utils to 8.8.0 ([32dceca](https://github.com/mini-app-polis/db-ops/commit/32dceca8c36ce14f031a929eda979d0c214b064f))
+* **deps:** bump miniapppolis-common-utils to 8.9.0 ([c4e62ba](https://github.com/mini-app-polis/db-ops/commit/c4e62ba77678af96bd4fe9f9e4503066db005b96))
+
+
+### Features
+
+* run on Python 3.14 ([1bf7a05](https://github.com/mini-app-polis/db-ops/commit/1bf7a056f1ed869555782e571aa269cbae602b03))
+
 ## [1.9.5](https://github.com/mini-app-polis/db-ops/compare/v1.9.4...v1.9.5) (2026-11-07)
 
 
