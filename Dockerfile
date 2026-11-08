@@ -15,7 +15,7 @@
 # Base images are pinned by digest (CD-022). To move to a newer patch, look
 # up the tag's current digest and replace it here, in a commit of its own.
 
-FROM python:3.11-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
+FROM python:3.14-slim-bookworm@sha256:3fe1a0b6c2d6b2ebb572906cdabeca75aeb558c0c17db5ffefbcf8094871c32b
 
 # Keep the client's major in step with the servers' (postgres-ssl:18).
 ARG PG_MAJOR=18

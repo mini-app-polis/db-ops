@@ -3,7 +3,7 @@ name = "db-ops"
 dynamic = ["version"]
 description = "Postgres operations for the ecosystem's production databases: metrics (db-poller), nightly dumps (db-backup) and restore drills (db-drill). Three Railway cron services, one run per wake."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "miniapppolis-common-utils>=8.0.0,<9",  # init_sentry (CD-038), log_settings
     "sentry-sdk>=2.0.0,<3.0.0",
@@ -55,7 +55,7 @@ pythonpath = ["src"]
 testpaths = ["tests/unit", "tests/integration"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 strict = false
 ignore_missing_imports = true
 
