@@ -26,6 +26,8 @@ jobs:
   test:
     uses: mini-app-polis/.github/.github/workflows/python-test.yml@v3
     with:
+      # The image's Python (Dockerfile, .python-version).
+      python-version: "3.14"
       # TEST-006: coverage measured on every run, reported in the terminal.
       pytest-args: "--cov=db_ops --cov-report=term-missing"
       # TEST-012: typechecked against [tool.mypy].
