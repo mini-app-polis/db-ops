@@ -13,7 +13,7 @@ dependencies = [
     "httpx>=0.27",
     "pydantic>=2.14.3,<3.0.0",
     "pydantic-settings>=2.16.2,<3.0.0",
-    "psycopg[binary]>=3.3.6,<4",
+    "psycopg[binary]>=3.3.8,<4",
 ]
 
 [dependency-groups]
