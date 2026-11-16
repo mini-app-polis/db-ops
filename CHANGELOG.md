@@ -1,3 +1,12 @@
+## [1.10.9](https://github.com/mini-app-polis/db-ops/compare/v1.10.8...v1.10.9) (2026-11-16)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.13.1 ([a2a5577](https://github.com/mini-app-polis/db-ops/commit/a2a557728d438b7df77cbc4c74d7c17689955aef))
+* **deps:** bump the minor-and-patch group with 4 updates ([5a8bec6](https://github.com/mini-app-polis/db-ops/commit/5a8bec601d2765aa39bd975a247e1ab567ad5038))
+* **deps:** update psycopg[binary] requirement ([ae808dc](https://github.com/mini-app-polis/db-ops/commit/ae808dcc644cb623af274dc3f1fece07e0c0e0ce))
+
 ## [1.10.8](https://github.com/mini-app-polis/db-ops/compare/v1.10.7...v1.10.8) (2026-11-15)
 
 
